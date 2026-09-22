@@ -48,80 +48,38 @@ Benchmark performance across a standardized 60-trip, 24-unit timetable instance:
 ```
 quantum-rolling-stock/
 ├── data/
-│   ├── stations.csv               # Railway stations, depots, and maintenance facility designations
-│   ├── distance_matrix.csv        # Precomputed pairwise station travel times and track distances
-│   ├── fleet.csv                  # Rolling stock trainsets, capacities, home depots, and initial mileage
-│   ├── trips.csv                  # Daily timetable trips with origins, destinations, and timings
-│   ├── demand.csv                 # Expected peak passenger demand per timetable trip
-│   ├── maintenance_rules.csv      # Maximum permissible distance intervals between overhauls per unit type
-│   └── instance_meta.json         # Metadata and configuration settings for the problem instance
+│   ├── stations.csv               # station nodes and depot flags
+│   ├── distance_matrix.csv        # pairwise travel time and km
+│   ├── fleet.csv                  # trainset types and initial state
+│   ├── trips.csv                  # daily timetable with timings
+│   ├── demand.csv                 # passenger demand per trip
+│   ├── maintenance_rules.csv      # max km per unit type
+│   └── instance_meta.json         # instance config metadata
 ├── src/
 │   ├── utils/
-│   │   ├── __init__.py            # Export package interface for shared utility functions
-│   │   ├── data_loader.py         # Standardized instance loader and fast dictionary index builder
-│   │   ├── cost.py                # Multi-criteria objective cost evaluation and penalty breakdown
-│   │   ├── feasibility.py         # Temporal and spatial arc/chain feasibility verification routines
-│   │   ├── greedy_init.py         # Deterministic greedy construction heuristic and schedule DataFrame exporter
-│   │   └── viz.py                 # Convergence trajectory, bar chart, and failure heatmap plotting
+│   │   ├── data_loader.py         # loads and indexes instance data
+│   │   ├── cost.py                # shared objective cost function
+│   │   ├── feasibility.py         # arc and chain feasibility checks
+│   │   ├── greedy_init.py         # greedy construction heuristic
+│   │   └── viz.py                 # shared plotting utilities
 │   ├── algorithms/
-│   │   ├── __init__.py            # Package interface exposing all optimization solver entrypoints
-│   │   ├── greedy.py              # Pure greedy dispatch baseline solver with diagnostic failure analysis
-│   │   ├── simulated_annealing.py # Metropolis simulated annealing metaheuristic with geometric cooling
-│   │   ├── genetic_algorithm.py   # Single-objective evolutionary algorithm with PMX crossover and elitism
-│   │   └── nsga2.py               # Non-dominated sorting genetic algorithm II for Pareto front optimization
-│   ├── run_all.py                 # Unified benchmark orchestrator executing all 4 algorithms sequentially
-│   ├── run_failure_analysis.py    # Classical failure diagnostic comparison and chart generation script
-│   └── scaling_failure_simulation.py # Computational complexity and constraint breakdown scaling simulator
+│   │   ├── greedy.py              # pure greedy baseline solver
+│   │   ├── simulated_annealing.py # SA with geometric cooling
+│   │   ├── genetic_algorithm.py   # GA with PMX crossover
+│   │   └── nsga2.py               # multi-objective Pareto solver
+│   ├── run_all.py                 # runs all 4 solvers sequentially
+│   ├── run_failure_analysis.py    # classical failure diagnostics
+│   └── scaling_failure_simulation.py # all-algo scaling experiment
 ├── outputs/
-│   ├── greedy/
-│   │   ├── .gitkeep               # Directory placeholder tracking greedy outputs folder in Git
-│   │   ├── final_schedule.csv     # Unit-by-unit timetable trip circulation plan from greedy dispatch
-│   │   ├── run_summary.json       # Cost breakdown and operational metrics for greedy baseline
-│   │   ├── cost_history.png       # Flat baseline cost trajectory visualization
-│   │   └── failure_analysis.json  # Diagnostic log of timing, uncovered, and overloaded trips
-│   ├── sa/
-│   │   ├── .gitkeep               # Directory placeholder tracking simulated annealing outputs
-│   │   ├── final_schedule.csv     # Unit-by-unit circulation schedule produced by simulated annealing
-│   │   ├── run_summary.json       # Initial vs final cost breakdown and percentage improvement
-│   │   ├── sa_cost_history.csv    # Iteration-by-iteration temperature and cost progression log
-│   │   └── cost_history.png       # Convergence curve of best and current costs over cooling steps
-│   ├── ga/
-│   │   ├── .gitkeep               # Directory placeholder tracking genetic algorithm outputs
-│   │   ├── final_schedule.csv     # Unit circulation schedule corresponding to the best chromosome
-│   │   ├── run_summary.json       # Hyperparameters, completed generations, and final cost breakdown
-│   │   ├── ga_cost_history.csv    # Generational log of best and average population costs
-│   │   ├── cost_history.png       # Evolutionary cost convergence trajectory plot
-│   │   └── failure_analysis.json  # Log of generations with timing violations and infeasible trips
-│   ├── nsga2/
-│   │   ├── .gitkeep               # Directory placeholder tracking NSGA-II outputs
-│   │   ├── final_schedule.csv     # Best compromise circulation plan selected from Pareto front
-│   │   ├── pareto_front.csv       # Non-dominated solution set across the three objective dimensions
-│   │   ├── run_summary.json       # Pareto front size and min/max statistics per objective
-│   │   ├── cost_history.csv       # Generational log of best f1, f2, f3, and Pareto set cardinality
-│   │   ├── cost_history.png       # Convergence trajectory of primary objective f1 (deadhead km)
-│   │   └── pareto_front.png       # 3D scatter visualization of the Pareto front colored by crowding distance
-│   └── comparison/
-│       ├── .gitkeep               # Directory placeholder tracking comparison folder in Git
-│       ├── master_comparison.csv  # Side-by-side benchmark table comparing all 4 solvers across all metrics
-│       ├── master_comparison.png  # 4-panel bar chart comparing total cost, deadhead, units, and demand
-│       ├── failure_summary.json   # Direct numerical comparison of failure metrics between Greedy and SA
-│       ├── classical_failure_chart.png # Grouped bar chart illustrating feasibility threshold breaches
-│       ├── cost_reduction_chart.png # SA cost reduction trajectory annotated against greedy and GA reference
-│       ├── scaling_failure.csv    # Scaling experiment table recording violations and runtimes vs n_trips
-│       └── scaling_failure.png    # Dual-axis line plot demonstrating greedy breakdown at network scale
-├── docs/
-│   └── math/
-│       ├── problem_formulation.tex # Formal LaTeX mathematical model of the circulation problem
-│       ├── simulated_annealing.tex # LaTeX documentation of state representation, moves, and cooling
-│       ├── greedy.tex             # LaTeX specification of sequential greedy dispatch and state logic
-│       ├── genetic_algorithm.tex  # LaTeX formulation of chromosome encoding, crossover, and elitism
-│       ├── nsga2.tex              # LaTeX specification of non-dominated sorting and crowding distance
-│       └── rolling_stock_mathematical_formulation.pdf # Original reference PDF formulation
-├── generate_data.py               # Synthetic instance generator creating stations, trips, fleet, and demand
-├── architecture.md                # System architectural specification and technical documentation
-├── README.md                      # High-level project overview, installation, and user instructions
-├── requirements.txt               # Pinned Python package dependencies for reproduction
-└── .gitignore                     # Git ignore rules for bytecode, cache, and generated PNG figures
+│   ├── greedy/                    # greedy schedule and metrics
+│   ├── sa/                        # SA schedule, cost history
+│   ├── ga/                        # GA schedule, generations log
+│   ├── nsga2/                     # Pareto front and 3D plot
+│   └── comparison/                # master comparison charts
+├── docs/math/                     # LaTeX formulations per algorithm
+├── generate_data.py               # synthetic instance generator
+├── architecture.md                # full system architecture doc
+└── requirements.txt               # Python dependencies
 ```
 
 ---
