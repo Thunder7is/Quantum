@@ -9,13 +9,13 @@ import pandas as pd
 try:
     from ..utils.data_loader import load_instance, get_lookups, travel
     from ..utils.cost import compute_cost
-    from ..utils.greedy_init import chains_to_schedule_df
+    from ..utils.greedy_init import greedy_construction, chains_to_schedule_df
     from ..utils.viz import plot_cost_history
 except (ImportError, ValueError):
     sys.path.insert(0, os.path.abspath(os.path.join(os.path.dirname(__file__), "..", "..")))
     from src.utils.data_loader import load_instance, get_lookups, travel
     from src.utils.cost import compute_cost
-    from src.utils.greedy_init import chains_to_schedule_df
+    from src.utils.greedy_init import greedy_construction, chains_to_schedule_df
     from src.utils.viz import plot_cost_history
 
 # GA hyperparameters matching research specifications
@@ -56,6 +56,30 @@ def chromosome_to_chains(chromosome: list, fleet_list: list, trips_list: list, t
             chains[uid].append(trip["trip_id"])
 
     return chains
+
+# Repair chromosome by resolving temporal timing infeasibilities
+def repair_chromosome(chromosome, fleet_list, trips_list, dist_lookup, fleet_lookup):
+    # For each gene (trip), check if unit is temporally available.
+    # If not, replace with the unit that currently has earliest availability at that station.
+    # This is a simple 1-pass repair that removes obvious timing violations.
+    repaired = list(chromosome)
+    unit_avail = {idx: fleet_list[idx]["available_from_min"] for idx in range(len(fleet_list))}
+    unit_loc = {idx: fleet_list[idx]["home_depot"] for idx in range(len(fleet_list))}
+
+    for trip_idx in range(len(repaired)):
+        trip = trips_list[trip_idx]
+        u_idx = repaired[trip_idx]
+        tt, _ = travel(dist_lookup, unit_loc[u_idx], trip["origin_station"])
+        if unit_avail[u_idx] + tt > trip["departure_min"]:
+            # Find a feasible unit instead
+            best = min(range(len(fleet_list)),
+                      key=lambda i: abs(unit_avail[i] - trip["departure_min"]))
+            repaired[trip_idx] = best
+            u_idx = best
+        # Update unit state after assignment
+        unit_avail[u_idx] = trip["arrival_min"] + trip["min_turnaround_min"]
+        unit_loc[u_idx] = trip["destination_station"]
+    return repaired
 
 # Identify trips that cause timing violations in an assignment
 def find_timing_violated_trips(chains: dict, fleet_lookup: dict, trips_lookup: dict, dist_lookup: dict) -> set:
@@ -113,7 +137,7 @@ def pmx_crossover(parent1: list, parent2: list, num_units: int, rng: random.Rand
     child1[c1:c2 + 1] = parent2[c1:c2 + 1]
     child2[c1:c2 + 1] = parent1[c1:c2 + 1]
 
-    # Repair: re-assign any unit that exceeds valid range or coupling limits
+    # Repair: re-assign any unit that exceeds valid range
     for i in range(length):
         child1[i] = max(0, min(num_units - 1, child1[i]))
         child2[i] = max(0, min(num_units - 1, child2[i]))
@@ -146,12 +170,50 @@ def solve_genetic_algorithm(fleet, trips, dist_lookup, maint_lookup,
     for idx, u in enumerate(fleet_list):
         type_to_unit_indices.setdefault(u["unit_type"], []).append(idx)
 
-    # Initialize 80 chromosomes by randomly permuting unit assignments (seeded)
-    population = []
-    for _ in range(pop_size):
-        base_permutation = [(idx % num_units) for idx in range(num_trips)]
-        rng.shuffle(base_permutation)
-        population.append(base_permutation)
+    # Build instance dict for greedy construction
+    instance = {
+        "fleet": fleet,
+        "trips": trips_sorted,
+        "dist_lookup": dist_lookup,
+        "maint_lookup": maint_lookup,
+    }
+
+    # 1. Use greedy_construction(instance) to build the first chromosome (seed_chromosome)
+    greedy_chains = greedy_construction(instance)
+    unit_id_to_idx = {u["unit_id"]: idx for idx, u in enumerate(fleet_list)}
+    trip_id_to_idx = {t["trip_id"]: idx for idx, t in enumerate(trips_list)}
+
+    seed_chromosome = [0] * num_trips
+    assigned_trips = set()
+    for uid, chain in greedy_chains.items():
+        u_idx = unit_id_to_idx[uid]
+        for tid in chain:
+            if tid in trip_id_to_idx:
+                t_idx = trip_id_to_idx[tid]
+                if t_idx not in assigned_trips:
+                    seed_chromosome[t_idx] = u_idx
+                    assigned_trips.add(t_idx)
+
+    # Fallback assignment for any trips uncovered by greedy
+    for t_idx in range(num_trips):
+        if t_idx not in assigned_trips:
+            seed_chromosome[t_idx] = t_idx % num_units
+
+    # 2. Initialize population[0] = seed_chromosome
+    population = [list(seed_chromosome)]
+
+    # 3. For population[1] to population[79], mutate 5 to 10 random genes of seed_chromosome
+    for _ in range(1, pop_size):
+        chrom = list(seed_chromosome)
+        num_mutations = rng.randint(5, 10)
+        positions = rng.sample(range(num_trips), min(num_mutations, num_trips))
+        for pos in positions:
+            choices = [u for u in range(num_units) if u != chrom[pos]]
+            if choices:
+                chrom[pos] = rng.choice(choices)
+        # Apply repair to ensure near-greedy chromosome remains valid
+        chrom = repair_chromosome(chrom, fleet_list, trips_list, dist_lookup, fleet_lookup)
+        population.append(chrom)
 
     # Evaluate initial population
     pop_eval = []
@@ -201,6 +263,10 @@ def solve_genetic_algorithm(fleet, trips, dist_lookup, maint_lookup,
             c1, c2 = pmx_crossover(p1, p2, num_units, rng)
             c1 = mutate_chromosome(c1, num_units, rng)
             c2 = mutate_chromosome(c2, num_units, rng)
+
+            # Post-crossover and mutation repair
+            c1 = repair_chromosome(c1, fleet_list, trips_list, dist_lookup, fleet_lookup)
+            c2 = repair_chromosome(c2, fleet_list, trips_list, dist_lookup, fleet_lookup)
 
             next_population.append(c1)
             if len(next_population) < pop_size:
