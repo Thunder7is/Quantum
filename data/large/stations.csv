@@ -1,0 +1,13 @@
+station_id,is_depot,has_maintenance_facility,platform_capacity
+S1,False,False,3
+S2,False,False,4
+S3,False,False,4
+S4,False,False,3
+S5,False,False,5
+S6,True,True,4
+S7,True,False,3
+S8,False,False,3
+S9,True,True,2
+S10,False,False,4
+S11,True,False,3
+S12,False,False,5

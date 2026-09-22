@@ -50,7 +50,11 @@ def build_scaled_trips(base_trips: pd.DataFrame, n_trips: int) -> pd.DataFrame:
 # Run scaling experiment across multiple trip counts
 def run_scaling_simulation():
     os.makedirs(OUT_DIR, exist_ok=True)
-    inst = load_instance()
+    large_dir = os.path.abspath(os.path.join(os.path.dirname(__file__), "..", "data", "large"))
+    if os.path.exists(os.path.join(large_dir, "trips.csv")):
+        inst = load_instance(large_dir)
+    else:
+        inst = load_instance()
     fleet = inst["fleet"]
     base_trips = inst["trips"]
     dist_lookup = inst["dist_lookup"]

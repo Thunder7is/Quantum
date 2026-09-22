@@ -1,0 +1,39 @@
+{
+  "seed": 99,
+  "n_stations": 12,
+  "depots": [
+    "S7",
+    "S11",
+    "S6",
+    "S9"
+  ],
+  "maintenance_depots": [
+    "S6",
+    "S9"
+  ],
+  "n_units": 48,
+  "unit_types": {
+    "EMU4": {
+      "capacity": 320,
+      "can_couple_max": 2
+    },
+    "EMU8": {
+      "capacity": 680,
+      "can_couple_max": 1
+    }
+  },
+  "n_trips": 120,
+  "operating_window": [
+    "04:00",
+    "00:00"
+  ],
+  "files": {
+    "stations": "stations.csv",
+    "distance_matrix": "distance_matrix.csv",
+    "fleet": "fleet.csv",
+    "trips": "trips.csv",
+    "demand": "demand.csv",
+    "maintenance_rules": "maintenance_rules.csv"
+  },
+  "objective_hint": "Minimize total empty (deadhead) travel + number of units used + maintenance violations, subject to: every trip covered with enough capacity, unit continuity (a unit can only start a trip where it ended the previous one, after turnaround time), and no unit exceeding max_km_between_maintenance without a maintenance visit at a maintenance-capable depot."
+}
