@@ -1,0 +1,21 @@
+{
+  "breakdown": {
+    "total": 8932.4,
+    "deadhead_km": 2812.4,
+    "units_used": 24,
+    "maintenance_violation_km": 0.0,
+    "uncovered_demand": 760,
+    "timing_violations": 1
+  },
+  "generations": 161,
+  "hyperparameters": {
+    "population_size": 80,
+    "max_generations": 300,
+    "plateau_patience": 50,
+    "tournament_k": 5,
+    "crossover_prob": 0.85,
+    "mutation_prob": 0.1,
+    "elitism": 2
+  },
+  "algorithm": "genetic_algorithm"
+}

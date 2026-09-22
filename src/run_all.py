@@ -83,9 +83,8 @@ def run_benchmark():
     # 3. Genetic Algorithm
     print("[3/4] Running Genetic Algorithm...")
     t0 = time.time()
-    ga_chains, ga_cost, ga_breakdown, ga_history = solve_genetic_algorithm(
-        fleet, trips, dist_lookup, maint_lookup
-    )
+    ga_res = solve_genetic_algorithm(fleet, trips, dist_lookup, maint_lookup)
+    ga_chains, ga_cost, ga_breakdown, ga_history = ga_res[0], ga_res[1], ga_res[2], ga_res[3]
     ga_time = time.time() - t0
     results["Genetic Algorithm"] = {"total_cost": ga_cost, "breakdown": ga_breakdown, "runtime_sec": round(ga_time, 2)}
     comparison_rows.append({
