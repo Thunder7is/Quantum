@@ -9,16 +9,16 @@ import pandas as pd
 try:
     from ..utils.data_loader import load_instance, get_lookups, travel
     from ..utils.cost import compute_cost
-    from ..utils.greedy_init import greedy_construction, chains_to_schedule_df
+    from ..utils.greedy_init import chains_to_schedule_df
     from ..utils.viz import plot_cost_history
 except (ImportError, ValueError):
     sys.path.insert(0, os.path.abspath(os.path.join(os.path.dirname(__file__), "..", "..")))
     from src.utils.data_loader import load_instance, get_lookups, travel
     from src.utils.cost import compute_cost
-    from src.utils.greedy_init import greedy_construction, chains_to_schedule_df
+    from src.utils.greedy_init import chains_to_schedule_df
     from src.utils.viz import plot_cost_history
 
-# GA hyperparameters matching research specification
+# GA hyperparameters matching research specifications
 POPULATION_SIZE = 80
 MAX_GENERATIONS = 300
 PLATEAU_PATIENCE = 50
@@ -33,7 +33,7 @@ MAX_COUPLE = 2
 # Directory path for genetic algorithm outputs
 OUT_DIR = os.path.abspath(os.path.join(os.path.dirname(__file__), "..", "..", "outputs", "ga"))
 
-# Map discrete trip-to-unit chromosome representation into unit circulation chains
+# Map discrete 60-trip chromosome representation to unit circulation chains
 def chromosome_to_chains(chromosome: list, fleet_list: list, trips_list: list, type_to_unit_indices: dict) -> dict:
     chains = {u["unit_id"]: [] for u in fleet_list}
     for trip_idx, u_idx in enumerate(chromosome):
@@ -41,7 +41,7 @@ def chromosome_to_chains(chromosome: list, fleet_list: list, trips_list: list, t
         primary_unit = fleet_list[u_idx]
         assigned_uids = [primary_unit["unit_id"]]
 
-        # Add second unit from same rolling stock type pool if demand exceeds single unit capacity
+        # Coupling: if demand > capacity, randomly add a second unit from the same type pool
         if trip.get("expected_passenger_demand", 0) > primary_unit["capacity"]:
             candidates = [idx for idx in type_to_unit_indices[primary_unit["unit_type"]] if idx != u_idx]
             if candidates:
@@ -57,7 +57,26 @@ def chromosome_to_chains(chromosome: list, fleet_list: list, trips_list: list, t
 
     return chains
 
-# Evaluate chromosome fitness using compute_cost with 10x timing violation penalty
+# Identify trips that cause timing violations in an assignment
+def find_timing_violated_trips(chains: dict, fleet_lookup: dict, trips_lookup: dict, dist_lookup: dict) -> set:
+    violated = set()
+    for uid, chain in chains.items():
+        if not chain:
+            continue
+        unit = fleet_lookup[uid]
+        loc = unit["home_depot"]
+        avail = unit["available_from_min"]
+        sorted_chain = sorted(chain, key=lambda tid: trips_lookup[tid]["departure_min"])
+        for tid in sorted_chain:
+            trip = trips_lookup[tid]
+            travel_time, _ = travel(dist_lookup, loc, trip["origin_station"])
+            if avail + travel_time > trip["departure_min"]:
+                violated.add(tid)
+            loc = trip["destination_station"]
+            avail = trip["arrival_min"] + trip["min_turnaround_min"]
+    return violated
+
+# Evaluate chromosome fitness using compute_cost with 10x penalty on timing violations
 def evaluate_chromosome(chromosome: list, fleet_list: list, trips_list: list, type_to_unit_indices: dict,
                         trips_lookup: dict, fleet_lookup: dict, dist_lookup: dict, maint_lookup: dict):
     chains = chromosome_to_chains(chromosome, fleet_list, trips_list, type_to_unit_indices)
@@ -65,49 +84,49 @@ def evaluate_chromosome(chromosome: list, fleet_list: list, trips_list: list, ty
     raw_cost = breakdown["total"]
     timing_violations = breakdown["timing_violations"]
 
-    # Apply 10x penalty multiplier to timing violation term
+    # Apply 10x penalty multiplier to timing violations term
     timing_extra = 9.0 * 1000.0 * timing_violations
     fitness = raw_cost + timing_extra
 
     return fitness, raw_cost, breakdown, chains
 
-# Perform tournament selection with tournament size k
+# Tournament selection with tournament size k=5
 def tournament_selection(population_eval: list, k: int, rng: random.Random) -> list:
     sample = rng.sample(population_eval, k)
-    # Lower fitness score is better
     sample.sort(key=lambda item: item[0])
     return sample[0][1]
 
-# Partially Mapped Crossover with cut points and coupling repair
+# Order-based PMX crossover with two random cut points and coupling bounds repair
 def pmx_crossover(parent1: list, parent2: list, num_units: int, rng: random.Random):
     length = len(parent1)
     if length < 2 or rng.random() > CROSSOVER_PROB:
         return list(parent1), list(parent2)
 
-    # Select two cut points
+    # Select two random cut points
     c1 = rng.randint(0, length - 2)
     c2 = rng.randint(c1 + 1, length - 1)
 
     child1 = list(parent1)
     child2 = list(parent2)
 
-    # Swap interior segment
+    # Swap the sub-segment between parents
     child1[c1:c2 + 1] = parent2[c1:c2 + 1]
     child2[c1:c2 + 1] = parent1[c1:c2 + 1]
 
-    # Repair valid range for unit indices
+    # Repair: re-assign any unit that exceeds valid range or coupling limits
     for i in range(length):
         child1[i] = max(0, min(num_units - 1, child1[i]))
         child2[i] = max(0, min(num_units - 1, child2[i]))
 
     return child1, child2
 
-# Per-gene uniform random mutation
-def mutate_chromosome(chromosome: list, num_units: int, mutation_prob: float, rng: random.Random) -> list:
+# Per-gene mutation randomly reassigning a trip to a different unit
+def mutate_chromosome(chromosome: list, num_units: int, rng: random.Random) -> list:
     mutated = list(chromosome)
     for i in range(len(mutated)):
-        if rng.random() < mutation_prob:
-            mutated[i] = rng.randint(0, num_units - 1)
+        if rng.random() < MUTATION_PROB_GENE:
+            choices = [u for u in range(num_units) if u != mutated[i]]
+            mutated[i] = rng.choice(choices)
     return mutated
 
 # Core genetic algorithm optimization solver
@@ -122,28 +141,17 @@ def solve_genetic_algorithm(fleet, trips, dist_lookup, maint_lookup,
     num_units = len(fleet_list)
     num_trips = len(trips_list)
 
-    # Group unit indices by rolling stock type for consistent coupling
+    # Group unit indices by rolling stock type
     type_to_unit_indices = {}
     for idx, u in enumerate(fleet_list):
         type_to_unit_indices.setdefault(u["unit_type"], []).append(idx)
 
-    # Initialize population by randomly permuting unit assignments
+    # Initialize 80 chromosomes by randomly permuting unit assignments (seeded)
     population = []
     for _ in range(pop_size):
-        chromosome = [rng.randint(0, num_units - 1) for _ in range(num_trips)]
-        population.append(chromosome)
-
-    # Seed one chromosome using greedy construction heuristic if available
-    inst = {"fleet": fleet, "trips": trips, "dist_lookup": dist_lookup, "maint_lookup": maint_lookup}
-    greedy_chains = greedy_construction(inst)
-    greedy_chrom = [0] * num_trips
-    uid_to_idx = {u["unit_id"]: idx for idx, u in enumerate(fleet_list)}
-    for uid, c in greedy_chains.items():
-        for tid in c:
-            for i, t in enumerate(trips_list):
-                if t["trip_id"] == tid:
-                    greedy_chrom[i] = uid_to_idx[uid]
-    population[0] = greedy_chrom
+        base_permutation = [(idx % num_units) for idx in range(num_trips)]
+        rng.shuffle(base_permutation)
+        population.append(base_permutation)
 
     # Evaluate initial population
     pop_eval = []
@@ -157,13 +165,20 @@ def solve_genetic_algorithm(fleet, trips, dist_lookup, maint_lookup,
     pop_eval.sort(key=lambda item: item[0])
     best_overall = pop_eval[0]
     best_fitness = best_overall[0]
-    patience_counter = 0
+    plateau_counter = 0
 
     cost_history = []
     generations_with_timing_violations = []
-    trip_feasible_tracker = {t["trip_id"]: False for t in trips_list}
+    ever_feasibly_assigned_trips = set()
 
-    # Record generation 0 metrics
+    # Check timing violations on initial generation best
+    init_violated = find_timing_violated_trips(best_overall[4], fleet_lookup, trips_lookup, dist_lookup)
+    if init_violated:
+        generations_with_timing_violations.append(0)
+    for t in trips_list:
+        if t["trip_id"] not in init_violated:
+            ever_feasibly_assigned_trips.add(t["trip_id"])
+
     avg_cost_gen0 = sum(item[2] for item in pop_eval) / len(pop_eval)
     cost_history.append({
         "generation": 0,
@@ -172,22 +187,20 @@ def solve_genetic_algorithm(fleet, trips, dist_lookup, maint_lookup,
         "avg_cost": round(avg_cost_gen0, 1),
         "total_cost": round(best_overall[2], 1)
     })
-    if best_overall[3]["timing_violations"] > 0:
-        generations_with_timing_violations.append(0)
 
-    # Evolution loop
+    # Generational evolution loop
     for gen in range(1, max_generations + 1):
-        # Elitism: retain top ELITISM_COUNT chromosomes
+        # Elitism: top 2 chromosomes always survive to next generation
         next_population = [item[1] for item in pop_eval[:ELITISM_COUNT]]
 
-        # Generate offspring via selection, crossover, and mutation
+        # Generate offspring
         while len(next_population) < pop_size:
             p1 = tournament_selection(pop_eval, TOURNAMENT_K, rng)
             p2 = tournament_selection(pop_eval, TOURNAMENT_K, rng)
 
             c1, c2 = pmx_crossover(p1, p2, num_units, rng)
-            c1 = mutate_chromosome(c1, num_units, MUTATION_PROB_GENE, rng)
-            c2 = mutate_chromosome(c2, num_units, MUTATION_PROB_GENE, rng)
+            c1 = mutate_chromosome(c1, num_units, rng)
+            c2 = mutate_chromosome(c2, num_units, rng)
 
             next_population.append(c1)
             if len(next_population) < pop_size:
@@ -195,7 +208,7 @@ def solve_genetic_algorithm(fleet, trips, dist_lookup, maint_lookup,
 
         population = next_population
 
-        # Evaluate offspring generation
+        # Evaluate offspring population
         pop_eval = []
         for chrom in population:
             fit, raw_cost, bd, chains = evaluate_chromosome(
@@ -208,23 +221,21 @@ def solve_genetic_algorithm(fleet, trips, dist_lookup, maint_lookup,
         gen_best = pop_eval[0]
         gen_avg_cost = sum(item[2] for item in pop_eval) / len(pop_eval)
 
-        # Track timing violations in current generation
-        if gen_best[3]["timing_violations"] > 0:
+        # Failure diagnostics tracking
+        gen_violated = find_timing_violated_trips(gen_best[4], fleet_lookup, trips_lookup, dist_lookup)
+        if gen_violated:
             generations_with_timing_violations.append(gen)
+        for t in trips_list:
+            if t["trip_id"] not in gen_violated:
+                ever_feasibly_assigned_trips.add(t["trip_id"])
 
-        # Track feasible assignment coverage per trip
-        for uid, chain in gen_best[4].items():
-            for tid in chain:
-                if gen_best[3]["timing_violations"] == 0:
-                    trip_feasible_tracker[tid] = True
-
-        # Check fitness improvement for convergence termination
+        # Check for fitness plateau
         if gen_best[0] < best_fitness - 1e-4:
             best_fitness = gen_best[0]
             best_overall = gen_best
-            patience_counter = 0
+            plateau_counter = 0
         else:
-            patience_counter += 1
+            plateau_counter += 1
 
         cost_history.append({
             "generation": gen,
@@ -234,20 +245,23 @@ def solve_genetic_algorithm(fleet, trips, dist_lookup, maint_lookup,
             "total_cost": round(best_overall[2], 1)
         })
 
-        # Plateau termination check
-        if patience_counter >= plateau_patience:
+        # Termination: fitness plateau for 50 consecutive generations
+        if plateau_counter >= plateau_patience:
             break
 
-    # Extract non-feasibly assigned trips
-    never_feasibly_assigned = [tid for tid, feasible in trip_feasible_tracker.items() if not feasible]
+    # Trips that were never feasibly assigned across any recorded best chromosome
+    trips_never_feasibly_assigned = sorted([
+        t["trip_id"] for t in trips_list if t["trip_id"] not in ever_feasibly_assigned_trips
+    ])
 
     best_chains = best_overall[4]
     best_cost = best_overall[2]
     best_breakdown = best_overall[3]
 
     diagnostics = {
+        "generations_where_timing_violations_gt_0": generations_with_timing_violations,
         "generations_with_timing_violations": generations_with_timing_violations,
-        "trips_never_feasibly_assigned": never_feasibly_assigned,
+        "trips_never_feasibly_assigned": trips_never_feasibly_assigned,
         "completed_generations": len(cost_history) - 1,
     }
 
@@ -264,7 +278,7 @@ def main():
     print(f"  Fleet: {len(fleet)} units | Trips: {len(trips)} | Population: {POPULATION_SIZE}")
     print("=================================================================\n")
 
-    # Run genetic algorithm solver
+    # Execute genetic algorithm
     best_chains, best_cost, best_breakdown, cost_history, diagnostics = solve_genetic_algorithm(
         fleet, trips, dist_lookup, maint_lookup
     )
@@ -272,7 +286,7 @@ def main():
     print("Genetic Algorithm solution cost breakdown:")
     print(json.dumps(best_breakdown, indent=2))
     print(f"\nCompleted generations: {diagnostics['completed_generations']}")
-    print(f"Generations with timing violations: {len(diagnostics['generations_with_timing_violations'])}")
+    print(f"Generations where timing violations > 0: {len(diagnostics['generations_where_timing_violations_gt_0'])}")
     print(f"Trips never feasibly assigned: {len(diagnostics['trips_never_feasibly_assigned'])}")
 
     # Save final schedule CSV
@@ -285,7 +299,7 @@ def main():
     history_path = os.path.join(OUT_DIR, "ga_cost_history.csv")
     history_df.to_csv(history_path, index=False)
 
-    # Save cost history PNG via plot_cost_history
+    # Call plot_cost_history saving to cost_history.png
     plot_path = os.path.join(OUT_DIR, "cost_history.png")
     plot_cost_history(cost_history, "Genetic Algorithm", plot_path)
 
@@ -311,7 +325,7 @@ def main():
     failure_path = os.path.join(OUT_DIR, "failure_analysis.json")
     with open(failure_path, "w") as f:
         json.dump({
-            "generations_with_timing_violations": diagnostics["generations_with_timing_violations"],
+            "generations_where_timing_violations_gt_0": diagnostics["generations_where_timing_violations_gt_0"],
             "trips_never_feasibly_assigned": diagnostics["trips_never_feasibly_assigned"],
         }, f, indent=2)
 
