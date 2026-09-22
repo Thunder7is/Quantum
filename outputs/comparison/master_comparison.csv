@@ -1,5 +1,5 @@
 algorithm,total_cost,deadhead_km,units_used,maintenance_violation_km,uncovered_demand,timing_violations,runtime_sec
-Greedy,5696.9,1184.9,20,0,756,0,0.17
-Simulated Annealing,4074.1,966.1,19,0,129,0,2.22
-Genetic Algorithm,7910.6,2574.6,23,0,943,0,1.56
-NSGA-II,7807.1,2205.1,24,0,501,1,2.98
+Greedy,5696.9,1184.9,20,0,756,0,0.23
+Simulated Annealing,4074.1,966.1,19,0,129,0,3.12
+Genetic Algorithm,7910.6,2574.6,23,0,943,0,1.79
+NSGA-II,7807.1,2205.1,24,0,501,1,3.46

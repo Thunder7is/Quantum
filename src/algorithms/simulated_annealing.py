@@ -176,7 +176,7 @@ def solve_simulated_annealing(fleet, trips, dist_lookup, maint_lookup, init_chai
 
     return best, best_cost, best_breakdown, history
 
-# Exported solver alias for simulated annealing
+# Alias for external imports expecting solve_sa name
 solve_sa = solve_simulated_annealing
 
 # Main execution routine
