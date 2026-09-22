@@ -55,3 +55,27 @@ def is_feasible_chain(unit_row, trip_ids: list, trips_df, dist_lookup) -> bool:
             return False
 
     return True
+
+# Repair chromosome by resolving temporal timing infeasibilities
+def repair_chromosome(chromosome, fleet_list, trips_list, dist_lookup, fleet_lookup=None):
+    # For each gene (trip), check if unit is temporally available
+    # If not, replace with the unit that currently has earliest availability at that station
+    # This is a simple 1-pass repair that removes obvious timing violations
+    repaired = list(chromosome)
+    unit_avail = {idx: fleet_list[idx]["available_from_min"] for idx in range(len(fleet_list))}
+    unit_loc = {idx: fleet_list[idx]["home_depot"] for idx in range(len(fleet_list))}
+
+    for trip_idx in range(len(repaired)):
+        trip = trips_list[trip_idx]
+        u_idx = repaired[trip_idx]
+        tt, _ = travel(dist_lookup, unit_loc[u_idx], trip["origin_station"])
+        if unit_avail[u_idx] + tt > trip["departure_min"]:
+            # Find a feasible unit instead
+            best = min(range(len(fleet_list)),
+                      key=lambda i: abs(unit_avail[i] - trip["departure_min"]))
+            repaired[trip_idx] = best
+            u_idx = best
+        # Update unit state after assignment
+        unit_avail[u_idx] = trip["arrival_min"] + trip["min_turnaround_min"]
+        unit_loc[u_idx] = trip["destination_station"]
+    return repaired

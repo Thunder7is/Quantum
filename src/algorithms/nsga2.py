@@ -14,12 +14,14 @@ from mpl_toolkits.mplot3d import Axes3D
 try:
     from ..utils.data_loader import load_instance, get_lookups, travel
     from ..utils.cost import compute_cost
+    from ..utils.feasibility import repair_chromosome
     from ..utils.greedy_init import greedy_construction, chains_to_schedule_df
     from ..utils.viz import plot_cost_history
 except (ImportError, ValueError):
     sys.path.insert(0, os.path.abspath(os.path.join(os.path.dirname(__file__), "..", "..")))
     from src.utils.data_loader import load_instance, get_lookups, travel
     from src.utils.cost import compute_cost
+    from src.utils.feasibility import repair_chromosome
     from src.utils.greedy_init import greedy_construction, chains_to_schedule_df
     from src.utils.viz import plot_cost_history
 
@@ -199,51 +201,75 @@ def solve_nsga2(fleet, trips, dist_lookup, maint_lookup,
     for idx, u in enumerate(fleet_list):
         type_to_unit_indices.setdefault(u["unit_type"], []).append(idx)
 
-    # Step 1: Initialize population using greedy_construction() as seed for first chromosome
-    population = []
-    inst = {"fleet": fleet, "trips": trips, "dist_lookup": dist_lookup, "maint_lookup": maint_lookup}
+    # Step 1: Build seed_chromosome from greedy_construction()
+    inst = {"fleet": fleet, "trips": trips_sorted, "dist_lookup": dist_lookup, "maint_lookup": maint_lookup}
     greedy_chains = greedy_construction(inst)
-    greedy_chrom = [0] * num_trips
-    uid_to_idx = {u["unit_id"]: idx for idx, u in enumerate(fleet_list)}
-    for uid, c in greedy_chains.items():
-        for tid in c:
-            for i, t in enumerate(trips_list):
-                if t["trip_id"] == tid:
-                    greedy_chrom[i] = uid_to_idx[uid]
-    population.append(greedy_chrom)
+    unit_id_to_idx = {u["unit_id"]: idx for idx, u in enumerate(fleet_list)}
+    trip_id_to_idx = {t["trip_id"]: idx for idx, t in enumerate(trips_list)}
 
-    # Fill remaining chromosomes with random unit assignments
-    for _ in range(pop_size - 1):
-        chrom = [rng.randint(0, num_units - 1) for _ in range(num_trips)]
+    seed_chromosome = [0] * num_trips
+    assigned_trips = set()
+    for uid, chain in greedy_chains.items():
+        u_idx = unit_id_to_idx[uid]
+        for tid in chain:
+            if tid in trip_id_to_idx:
+                t_idx = trip_id_to_idx[tid]
+                if t_idx not in assigned_trips:
+                    seed_chromosome[t_idx] = u_idx
+                    assigned_trips.add(t_idx)
+
+    # Fallback assignment for any trips uncovered by greedy
+    for t_idx in range(num_trips):
+        if t_idx not in assigned_trips:
+            seed_chromosome[t_idx] = t_idx % num_units
+
+    # Initialize population[0] = seed_chromosome
+    population = [list(seed_chromosome)]
+
+    # population[1] to population[pop_size - 1] = seed_chromosome with 5-10 random gene swaps
+    for _ in range(1, pop_size):
+        chrom = list(seed_chromosome)
+        num_mutations = rng.randint(5, 10)
+        positions = rng.sample(range(num_trips), min(num_mutations, num_trips))
+        for pos in positions:
+            choices = [u for u in range(num_units) if u != chrom[pos]]
+            if choices:
+                chrom[pos] = rng.choice(choices)
+        # Apply repair operator to ensure near-greedy chromosome remains feasible
+        chrom = repair_chromosome(chrom, fleet_list, trips_list, dist_lookup, fleet_lookup)
         population.append(chrom)
 
     history_records = []
 
     # Generational evolution loop
-    for gen in range(generations):
-        # Step 2: Evaluate population objectives
-        eval_results = [
+    for gen in range(1, generations + 1):
+        # Step 2: Fast non-dominated sort on current population
+        pop_eval = [
             evaluate_chromosome(chrom, fleet_list, trips_list, type_to_unit_indices,
                                 trips_lookup, fleet_lookup, dist_lookup, maint_lookup)
             for chrom in population
         ]
-        objectives_list = [r[0] for r in eval_results]
-
-        # Fast non-dominated sort and crowding distance assignment
+        objectives_list = [r[0] for r in pop_eval]
         fronts = fast_non_dominated_sort(objectives_list)
-        rank = {}
-        crowding = {}
-        for r_idx, front in enumerate(fronts):
-            cd = compute_crowding_distance(front, objectives_list)
-            for idx in front:
-                rank[idx] = r_idx
-                crowding[idx] = cd[idx]
 
-        # Record generation history metrics
-        best_f1 = min(o[0] for o in objectives_list)
-        best_f2 = min(o[1] for o in objectives_list)
-        best_f3 = min(o[2] for o in objectives_list)
-        n_pareto = len(fronts[0])
+        # Assign rank to each individual
+        rank = {}
+        for r, front in enumerate(fronts):
+            for idx in front:
+                rank[idx] = r
+
+        # Step 3: Compute crowding distance for each front
+        crowding = {}
+        for front in fronts:
+            cd_dict = compute_crowding_distance(front, objectives_list)
+            crowding.update(cd_dict)
+
+        # Log metrics for generation history
+        best_f1 = min(obj[0] for obj in objectives_list)
+        best_f2 = min(obj[1] for obj in objectives_list)
+        best_f3 = min(obj[2] for obj in objectives_list)
+        n_pareto = len(fronts[0]) if fronts else 0
+
         history_records.append({
             "generation": gen,
             "step": gen,
@@ -255,7 +281,7 @@ def solve_nsga2(fleet, trips, dist_lookup, maint_lookup,
             "total_cost": round(best_f1, 1),
         })
 
-        # Step 4 & 5: Selection, SBX crossover, and polynomial mutation to create offspring
+        # Step 4 & 5: Selection, SBX crossover, polynomial mutation, and repair to create offspring
         offspring = []
         while len(offspring) < pop_size:
             p1_idx = binary_tournament(rng.randint(0, pop_size - 1), rng.randint(0, pop_size - 1), rank, crowding)
@@ -265,11 +291,15 @@ def solve_nsga2(fleet, trips, dist_lookup, maint_lookup,
             c1 = polynomial_mutation(c1, num_units, rng)
             c2 = polynomial_mutation(c2, num_units, rng)
 
+            # Repair offspring chromosomes
+            c1 = repair_chromosome(c1, fleet_list, trips_list, dist_lookup, fleet_lookup)
+            c2 = repair_chromosome(c2, fleet_list, trips_list, dist_lookup, fleet_lookup)
+
             offspring.append(c1)
             if len(offspring) < pop_size:
                 offspring.append(c2)
 
-        # Step 6: Combine parent and offspring (2N population), re-sort, and select top N
+        # Step 6: Combine parent and offspring (2N population), re-evaluate, re-sort, and select top N
         combined_population = population + offspring
         combined_eval = [
             evaluate_chromosome(chrom, fleet_list, trips_list, type_to_unit_indices,
@@ -292,7 +322,7 @@ def solve_nsga2(fleet, trips, dist_lookup, maint_lookup,
 
         population = next_population
 
-    # Final population evaluation
+    # Final population evaluation on repaired chromosomes
     final_eval = [
         evaluate_chromosome(chrom, fleet_list, trips_list, type_to_unit_indices,
                             trips_lookup, fleet_lookup, dist_lookup, maint_lookup)
