@@ -1,0 +1,25 @@
+{
+  "initial_breakdown": {
+    "total_deadhead_km": 1741.9,
+    "units_used": 22,
+    "maintenance_violation_km": 0.0,
+    "uncovered_demand_passengers": 0,
+    "timing_violations": 15,
+    "total_cost": 20041.9
+  },
+  "final_breakdown": {
+    "total_deadhead_km": 1262.1,
+    "units_used": 19,
+    "maintenance_violation_km": 0.0,
+    "uncovered_demand_passengers": 97,
+    "timing_violations": 0,
+    "total_cost": 4306.1
+  },
+  "improvement_pct": 78.5,
+  "sa_config": {
+    "initial_temp": 500.0,
+    "cooling_rate": 0.995,
+    "min_temp": 0.5,
+    "iterations_per_temp": 40
+  }
+}
