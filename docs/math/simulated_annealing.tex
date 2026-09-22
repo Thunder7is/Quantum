@@ -1,0 +1,37 @@
+\section{Simulated Annealing Algorithm Formulation}
+
+\subsection{State Representation}
+Let the solution state $\mathcal{S}$ be represented as an indexed collection of unit circulation chains:
+\begin{equation}
+    \mathcal{S} = \{ \mathcal{C}_u \mid u \in U \}, \quad \text{where } \mathcal{C}_u = (i_1, i_2, \dots, i_{k_u})
+\end{equation}
+in strictly non-decreasing order of departure time: $\text{dep}_{i_1} \le \text{dep}_{i_2} \le \dots \le \text{dep}_{i_{k_u}}$.
+
+\subsection{Neighborhood Operators}
+At temperature $T_k$, candidate solution $\mathcal{S}' \in \mathcal{N}(\mathcal{S})$ is generated via stochastic selection among three mutation operators:
+\begin{enumerate}
+    \item \textbf{Relocate Operator} ($\mathcal{O}_{\text{relocate}}$): Select unit $u_{\text{src}}$ with $|\mathcal{C}_{u_{\text{src}}}| \ge 1$ and target unit $u_{\text{dst}} \in U$. Remove trip $i \in \mathcal{C}_{u_{\text{src}}}$ and append to $\mathcal{C}_{u_{\text{dst}}}$.
+    \item \textbf{Swap Operator} ($\mathcal{O}_{\text{swap}}$): Select two distinct units $u_1, u_2 \in U$ having non-empty chains. Exchange random trips $i_1 \in \mathcal{C}_{u_1}$ and $i_2 \in \mathcal{C}_{u_2}$.
+    \item \textbf{Coupling/Decoupling Operator} ($\mathcal{O}_{\text{couple}}$): For a randomly selected trip $j \in T$, adjust rolling stock multi-unit consist composition by adding an unassigned unit or removing an existing coupled unit.
+\end{enumerate}
+
+\subsection{Metropolis Acceptance Criterion}
+Given current objective $\mathcal{J}(\mathcal{S})$ and neighbor objective $\mathcal{J}(\mathcal{S}')$, compute cost deviation:
+\begin{equation}
+    \Delta \mathcal{J} = \mathcal{J}(\mathcal{S}') - \mathcal{J}(\mathcal{S})
+\end{equation}
+The candidate transition probability $P(\mathcal{S} \to \mathcal{S}' \mid T_k)$ is governed by:
+\begin{equation}
+    P(\mathcal{S} \to \mathcal{S}' \mid T_k) = 
+    \begin{cases}
+        1, & \text{if } \Delta \mathcal{J} \le 0 \\
+        \exp\left(-\frac{\Delta \mathcal{J}}{T_k}\right), & \text{if } \Delta \mathcal{J} > 0
+    \end{cases}
+\end{equation}
+
+\subsection{Geometric Cooling Schedule}
+The temperature sequence is updated geometrically after every $L$ inner evaluations:
+\begin{equation}
+    T_{k+1} = \alpha \cdot T_k, \quad k = 0, 1, 2, \dots
+\end{equation}
+where $\alpha \in (0, 1)$ represents the cooling coefficient (nominal $\alpha = 0.995$), with initial temperature $T_0 = 500.0$ and stopping threshold $T_{\text{min}} = 0.5$.

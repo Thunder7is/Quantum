@@ -1,0 +1,41 @@
+\section{NSGA-II Multi-Objective Optimization Formulation}
+
+\subsection{Multi-Objective Vector}
+Rather than scalarizing all objectives into a single cost metric, NSGA-II optimizes a bi-objective vector $\mathbf{F}(\mathbf{X}) = (f_1(\mathbf{X}), f_2(\mathbf{X}))$:
+\begin{align}
+    f_1(\mathbf{X}) &= \mathcal{D}(\mathbf{X}) + W_{\text{unit}} \cdot \mathcal{U}(\mathbf{X}) \quad &&\text{(Operational Resource Consumption)} \\
+    f_2(\mathbf{X}) &= W_{\text{demand}} \cdot \mathcal{P}(\mathbf{X}) + W_{\text{maint}} \cdot \mathcal{M}(\mathbf{X}) + W_{\text{timing}} \cdot \mathcal{V}_{\text{time}}(\mathbf{X}) \quad &&\text{(Reliability and Constraint Penalties)}
+\end{align}
+
+\subsection{Pareto Dominance}
+A candidate solution $\mathbf{X}_1$ is said to strictly dominate $\mathbf{X}_2$ (denoted $\mathbf{X}_1 \prec \mathbf{X}_2$) if and only if:
+\begin{equation}
+    \forall m \in \{1, 2\}, \quad f_m(\mathbf{X}_1) \le f_m(\mathbf{X}_2) \quad \text{and} \quad \exists m \in \{1, 2\}, \quad f_m(\mathbf{X}_1) < f_m(\mathbf{X}_2)
+\end{equation}
+
+\subsection{Fast Non-Dominated Sorting}
+The combined population $\mathcal{R}_t = \mathcal{P}_t \cup \mathcal{Q}_t$ of size $2N$ is partitioned into hierarchical non-dominated fronts:
+\begin{equation}
+    \mathcal{F} = (\mathcal{F}_1, \mathcal{F}_2, \dots, \mathcal{F}_K)
+\end{equation}
+where $\mathcal{F}_1$ is the set of non-dominated solutions in $\mathcal{R}_t$, and each subsequent front $\mathcal{F}_{k}$ is formed by identifying non-dominated solutions within $\mathcal{R}_t \setminus \bigcup_{j=1}^{k-1} \mathcal{F}_j$.
+
+\subsection{Crowding Distance Metric}
+For each front $\mathcal{F}_k$, solutions are ranked along each objective axis $m \in \{1, 2\}$. Boundary solutions are assigned infinite distance:
+\begin{equation}
+    I(1)_{\text{dist}} = I(|\mathcal{F}_k|)_{\text{dist}} = \infty
+\end{equation}
+For intermediate indices $j \in \{2, \dots, |\mathcal{F}_k| - 1\}$:
+\begin{equation}
+    I(j)_{\text{dist}} = \sum_{m=1}^2 \frac{f_m(I(j+1)) - f_m(I(j-1))}{f_m^{\text{max}} - f_m^{\text{min}}}
+\end{equation}
+
+\subsection{Crowded Tournament Comparison}
+The crowded comparison operator $\prec_n$ governs selection between solutions $i$ and $j$:
+\begin{equation}
+    i \prec_n j \iff (r_i < r_j) \lor (r_i = r_j \land i_{\text{dist}} > j_{\text{dist}})
+\end{equation}
+where $r_i$ denotes the non-domination rank of solution $i$.
+
+\subsection{Elitist Survivor Selection}
+Successive population $\mathcal{P}_{t+1}$ is populated front-by-front until adding the next front $\mathcal{F}_l$ exceeds capacity $N$. The remaining slots are filled by sorting $\mathcal{F}_l$ in descending order of crowding distance.

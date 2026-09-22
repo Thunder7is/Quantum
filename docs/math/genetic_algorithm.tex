@@ -1,0 +1,39 @@
+\section{Genetic Algorithm Formulation}
+
+\subsection{Chromosome Encoding}
+A candidate chromosome $\mathbf{X}$ represents the assignment mapping $\Gamma: T \to 2^U$, where each trip $i \in T$ is assigned a non-empty subset of rolling stock units $\Gamma(i) \subseteq U$. In dual representation:
+\begin{equation}
+    \mathbf{X} = \{ \mathcal{C}_u \mid u \in U \}
+\end{equation}
+where $\mathcal{C}_u$ is the chronological permutation of trips served by trainset $u$.
+
+\subsection{Fitness Function}
+The fitness measure $F(\mathbf{X})$ is defined inversely relative to the scalarized penalization cost $\mathcal{J}(\mathbf{X})$:
+\begin{equation}
+    F(\mathbf{X}) = \frac{1}{1 + \mathcal{J}(\mathbf{X})}
+\end{equation}
+where $\mathcal{J}(\mathbf{X})$ incorporates deadhead distance, unit activation counts, maintenance breaches, uncovered passenger demand, and timing infeasibilities.
+
+\subsection{Selection: Tournament Mechanism}
+For population $\mathcal{P} = \{ \mathbf{X}_1, \dots, \mathbf{X}_N \}$, parents are chosen via tournament selection with tournament size $k = 3$:
+\begin{equation}
+    \mathbf{X}_{\text{parent}} = \arg\max_{\mathbf{X} \in \Omega_{\text{sample}}} F(\mathbf{X}), \quad |\Omega_{\text{sample}}| = k
+\end{equation}
+
+\subsection{Recombination (Crossover)}
+Given parent schedules $\mathbf{X}_A$ and $\mathbf{X}_B$, uniform trip-level gene crossover produces offspring $\mathbf{X}_C$:
+\begin{equation}
+    \Gamma_C(i) = 
+    \begin{cases}
+        \Gamma_A(i), & \text{with probability } p_c = 0.5 \\
+        \Gamma_B(i), & \text{with probability } 1 - p_c = 0.5
+    \end{cases}
+    \quad \forall i \in T
+\end{equation}
+
+\subsection{Mutation and Elitism}
+With probability $p_m$, offspring $\mathbf{X}_C$ undergoes stochastic perturbation using relocate, swap, or consist resizing operators:
+\begin{equation}
+    \mathbf{X}_C \leftarrow \mathcal{M}(\mathbf{X}_C)
+\end{equation}
+Elitism strictly preserves the top-performing individual $\mathbf{X}^* = \arg\min_{\mathbf{X} \in \mathcal{P}} \mathcal{J}(\mathbf{X})$ into generation $g+1$ without modification.

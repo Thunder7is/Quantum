@@ -1,0 +1,46 @@
+\section{Greedy Construction Heuristic Formulation}
+
+\subsection{Algorithmic Overview}
+The greedy construction algorithm establishes a deterministic, feasible baseline schedule by processing the set of timetable trips $T$ sequentially in chronological order of departure:
+\begin{equation}
+    T = (i_1, i_2, \dots, i_{|T|}), \quad \text{such that } \text{dep}_{i_1} \le \text{dep}_{i_2} \le \dots \le \text{dep}_{i_{|T|}}
+\end{equation}
+
+\subsection{State Tracking}
+For each unit $u \in U$, maintain dynamic state vector $\sigma_u = (\text{loc}_u, \text{avail}_u, \mu_u)$, initialized at $t = 0$:
+\begin{align}
+    \text{loc}_u^{(0)} &= h_u \\
+    \text{avail}_u^{(0)} &= a_u \\
+    \mu_u^{(0)} &= \mu_u^{\text{init}}
+\end{align}
+
+\subsection{Candidate Evaluation and Selection}
+For trip $i \in T$ with origin $o_i$, destination $d_i$, and passenger demand $\rho_i$:
+\begin{enumerate}
+    \item Identify the set of temporally available candidate units:
+    \begin{equation}
+        \mathcal{U}_{\text{ready}}(i) = \{ u \in U \mid \text{avail}_u \le \text{dep}_i \}
+    \end{equation}
+    \item Rank candidates by deadhead distance $\delta(\text{loc}_u, o_i)$ to minimize immediate positioning cost:
+    \begin{equation}
+        u^* = \arg\min_{u \in \mathcal{U}_{\text{ready}}(i)} \delta(\text{loc}_u, o_i)
+    \end{equation}
+    \item Assign units iteratively until aggregate capacity meets demand:
+    \begin{equation}
+        \sum_{u \in \text{Assigned}(i)} c_u \ge \rho_i
+    \end{equation}
+    \item If $\mathcal{U}_{\text{ready}}(i) = \emptyset$, invoke fallback rule:
+    \begin{equation}
+        u_{\text{fallback}} = \arg\min_{u \in U} \text{avail}_u
+    \end{equation}
+    which prioritizes earliest subsequent availability.
+\end{enumerate}
+
+\subsection{State Transition Update}
+Upon assigning unit $u$ to trip $i$:
+\begin{align}
+    \text{loc}_u &\leftarrow d_i \\
+    \text{avail}_u &\leftarrow \text{arr}_i + \tau_i \\
+    \mu_u &\leftarrow \mu_u + \delta(\text{loc}_u, o_i) + \ell_i
+\end{align}
+The worst-case computational complexity is $\mathcal{O}(|T| \cdot |U| \log |U|)$.
