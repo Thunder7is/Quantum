@@ -1,56 +1,93 @@
-# NSGA-II multi-objective evolutionary algorithm solver for rolling stock circulation
+# NSGA-II multi-objective evolutionary algorithm solver for rolling stock scheduling
 import os
+import sys
 import json
 import random
 import pandas as pd
+import numpy as np
 import matplotlib
 matplotlib.use("Agg")
 import matplotlib.pyplot as plt
-from ..utils.data_loader import load_instance, get_lookups
-from ..utils.cost import compute_cost
-from ..utils.greedy_init import greedy_construction, chains_to_schedule_df
-from ..utils.viz import plot_cost_history
+from mpl_toolkits.mplot3d import Axes3D
 
-# Default NSGA-II parameters
-POPULATION_SIZE = 30
-GENERATIONS = 50
+# Support execution as direct script or package module
+try:
+    from ..utils.data_loader import load_instance, get_lookups, travel
+    from ..utils.cost import compute_cost
+    from ..utils.greedy_init import greedy_construction, chains_to_schedule_df
+    from ..utils.viz import plot_cost_history
+except (ImportError, ValueError):
+    sys.path.insert(0, os.path.abspath(os.path.join(os.path.dirname(__file__), "..", "..")))
+    from src.utils.data_loader import load_instance, get_lookups, travel
+    from src.utils.cost import compute_cost
+    from src.utils.greedy_init import greedy_construction, chains_to_schedule_df
+    from src.utils.viz import plot_cost_history
+
+# NSGA-II hyperparameters matching research specification
+POPULATION_SIZE = 60
+GENERATIONS = 200
+ETA_C = 15.0
+CROSSOVER_PROB = 0.9
+ETA_M = 20.0
 SEED = 42
+MAX_COUPLE = 2
 
-# Directory path for NSGA-II outputs
+# Output directory path for NSGA-II artifacts
 OUT_DIR = os.path.abspath(os.path.join(os.path.dirname(__file__), "..", "..", "outputs", "nsga2"))
 
-# Copy chains structure
-def copy_chains(chains):
-    return {uid: list(trips) for uid, trips in chains.items()}
+# Map discrete 60-trip chromosome into rolling stock unit circulation chains
+def chromosome_to_chains(chromosome: list, fleet_list: list, trips_list: list, type_to_unit_indices: dict) -> dict:
+    chains = {u["unit_id"]: [] for u in fleet_list}
+    for trip_idx, u_idx in enumerate(chromosome):
+        trip = trips_list[trip_idx]
+        primary_unit = fleet_list[u_idx]
+        assigned_uids = [primary_unit["unit_id"]]
 
-# Evaluate two distinct objective vectors for multi-objective optimization
-def evaluate_objectives(chains, fleet_lookup, trips_lookup, dist_lookup, maint_lookup):
+        # Coupling: add second unit from same type pool if passenger demand exceeds single capacity
+        if trip.get("expected_passenger_demand", 0) > primary_unit["capacity"]:
+            candidates = [idx for idx in type_to_unit_indices[primary_unit["unit_type"]] if idx != u_idx]
+            if candidates:
+                sec_idx = candidates[(trip_idx + u_idx) % len(candidates)]
+                sec_uid = fleet_list[sec_idx]["unit_id"]
+                if len(assigned_uids) < MAX_COUPLE and sec_uid not in assigned_uids:
+                    assigned_uids.append(sec_uid)
+
+        for uid in assigned_uids:
+            chains[uid].append(trip["trip_id"])
+
+    return chains
+
+# Evaluate chromosome across the 3 simultaneous objectives
+def evaluate_chromosome(chromosome: list, fleet_list: list, trips_list: list, type_to_unit_indices: dict,
+                        trips_lookup: dict, fleet_lookup: dict, dist_lookup: dict, maint_lookup: dict):
+    chains = chromosome_to_chains(chromosome, fleet_list, trips_list, type_to_unit_indices)
     bd = compute_cost(chains, trips_lookup, fleet_lookup, dist_lookup, maint_lookup)
-    cost = bd["total"]
-    # Objective 1: Operational resource consumption (deadhead km + unit activation penalty)
-    f1 = bd["deadhead_km"] + 150.0 * bd["units_used"]
-    # Objective 2: Service quality and reliability penalty (uncovered demand + maintenance + timing)
-    f2 = (bd["uncovered_demand"] * 2.0
-          + bd["maintenance_violation_km"] * 5.0
-          + bd["timing_violations"] * 1000.0)
-    return (f1, f2), cost, bd
+    # Objective 1: Deadhead transit kilometers
+    f1 = float(bd.get("deadhead_km", bd.get("total_deadhead_km", 0.0)))
+    # Objective 2: Number of distinct trainset units activated
+    f2 = float(bd.get("units_used", 0))
+    # Objective 3: Uncovered passenger demand + 100x timing violations constraint penalty
+    uncovered = float(bd.get("uncovered_demand", bd.get("uncovered_demand_passengers", 0)))
+    timing = float(bd.get("timing_violations", 0))
+    f3 = uncovered + timing * 100.0
+    return (f1, f2, f3), bd["total"], bd, chains
 
-# Domination check: returns True if objective vector p dominates vector q
-def dominates(p, q):
-    return (p[0] <= q[0] and p[1] <= q[1]) and (p[0] < q[0] or p[1] < q[1])
+# Pareto dominance check: returns True if objective vector p dominates vector q
+def dominates(p: tuple, q: tuple) -> bool:
+    return (p[0] <= q[0] and p[1] <= q[1] and p[2] <= q[2]) and (p[0] < q[0] or p[1] < q[1] or p[2] < q[2])
 
-# Fast non-dominated sorting
-def fast_non_dominated_sort(objectives):
-    num_ind = len(objectives)
-    domination_count = [0] * num_ind
-    dominated_solutions = [[] for _ in range(num_ind)]
+# Fast non-dominated sorting partitioning population into Pareto ranks
+def fast_non_dominated_sort(objectives_list: list) -> list:
+    n = len(objectives_list)
+    domination_count = [0] * n
+    dominated_solutions = [[] for _ in range(n)]
     fronts = [[]]
 
-    for p in range(num_ind):
-        for q in range(num_ind):
-            if dominates(objectives[p], objectives[q]):
+    for p in range(n):
+        for q in range(n):
+            if dominates(objectives_list[p], objectives_list[q]):
                 dominated_solutions[p].append(q)
-            elif dominates(objectives[q], objectives[p]):
+            elif dominates(objectives_list[q], objectives_list[p]):
                 domination_count[p] += 1
         if domination_count[p] == 0:
             fronts[0].append(p)
@@ -68,229 +105,315 @@ def fast_non_dominated_sort(objectives):
     fronts.pop()
     return fronts
 
-# Calculate crowding distance for diversity maintenance
-def calculate_crowding_distance(front, objectives):
+# Compute crowding distance for a specific non-dominated front
+def compute_crowding_distance(front: list, objectives_list: list) -> dict:
     distance = {idx: 0.0 for idx in front}
-    if len(front) <= 2:
+    num_solutions = len(front)
+    if num_solutions <= 2:
         for idx in front:
             distance[idx] = float("inf")
         return distance
 
-    for m in range(2):
-        front_sorted = sorted(front, key=lambda idx: objectives[idx][m])
-        distance[front_sorted[0]] = float("inf")
-        distance[front_sorted[-1]] = float("inf")
-        norm = objectives[front_sorted[-1]][m] - objectives[front_sorted[0]][m]
-        if norm == 0:
+    # Iterate over all three objective dimensions
+    for m in range(3):
+        sorted_front = sorted(front, key=lambda idx: objectives_list[idx][m])
+        distance[sorted_front[0]] = float("inf")
+        distance[sorted_front[-1]] = float("inf")
+        denom = objectives_list[sorted_front[-1]][m] - objectives_list[sorted_front[0]][m]
+        if denom == 0:
             continue
-        for i in range(1, len(front_sorted) - 1):
-            distance[front_sorted[i]] += (objectives[front_sorted[i + 1]][m] - objectives[front_sorted[i - 1]][m]) / norm
+        for i in range(1, num_solutions - 1):
+            distance[sorted_front[i]] += (objectives_list[sorted_front[i + 1]][m] - objectives_list[sorted_front[i - 1]][m]) / denom
+
     return distance
 
-# Mutation operator
-def mutate(chains, all_unit_ids, all_trip_ids, rng):
-    mutated = copy_chains(chains)
-    if rng.random() < 0.5:
-        donors = [uid for uid, c in mutated.items() if c]
-        if donors:
-            d = rng.choice(donors)
-            t = rng.choice(mutated[d])
-            r = rng.choice(all_unit_ids)
-            mutated[d].remove(t)
-            mutated[r].append(t)
-    else:
-        non_empty = [uid for uid, c in mutated.items() if c]
-        if len(non_empty) >= 2:
-            u1, u2 = rng.sample(non_empty, 2)
-            t1 = rng.choice(mutated[u1])
-            t2 = rng.choice(mutated[u2])
-            mutated[u1].remove(t1)
-            mutated[u2].remove(t2)
-            mutated[u1].append(t2)
-            mutated[u2].append(t1)
-    return mutated
-
-# Uniform crossover between two schedules
-def crossover(p1, p2, all_trip_ids, all_unit_ids, rng):
-    child = {uid: [] for uid in all_unit_ids}
-    t_map1 = {t: [uid for uid, c in p1.items() if t in c] for t in all_trip_ids}
-    t_map2 = {t: [uid for uid, c in p2.items() if t in c] for t in all_trip_ids}
-    for t in all_trip_ids:
-        chosen = t_map1[t] if rng.random() < 0.5 else t_map2[t]
-        if not chosen:
-            chosen = [rng.choice(all_unit_ids)]
-        for uid in chosen:
-            child[uid].append(t)
-    return child
-
-# Crowded tournament comparison
-def crowded_comparison(i1, i2, rank, crowding):
+# Binary tournament selection based on rank and crowding distance
+def binary_tournament(i1: int, i2: int, rank: dict, crowding: dict) -> int:
     if rank[i1] < rank[i2]:
         return i1
     if rank[i2] < rank[i1]:
         return i2
+    # Within same rank, prefer solution with larger crowding distance
     if crowding[i1] > crowding[i2]:
         return i1
     return i2
 
-# Core NSGA-II solver
+# Simulated Binary Crossover (SBX) with distribution index eta=15
+def sbx_crossover(parent1: list, parent2: list, num_units: int, rng: random.Random):
+    if rng.random() > CROSSOVER_PROB:
+        return list(parent1), list(parent2)
+
+    length = len(parent1)
+    child1 = list(parent1)
+    child2 = list(parent2)
+
+    for i in range(length):
+        if rng.random() <= 0.5:
+            p1_val = float(parent1[i])
+            p2_val = float(parent2[i])
+            if abs(p1_val - p2_val) > 1e-6:
+                u = rng.random()
+                if u <= 0.5:
+                    beta = (2.0 * u) ** (1.0 / (ETA_C + 1.0))
+                else:
+                    beta = (1.0 / (2.0 * (1.0 - u))) ** (1.0 / (ETA_C + 1.0))
+                c1 = 0.5 * ((1.0 + beta) * p1_val + (1.0 - beta) * p2_val)
+                c2 = 0.5 * ((1.0 - beta) * p1_val + (1.0 + beta) * p2_val)
+                child1[i] = int(round(max(0, min(num_units - 1, c1))))
+                child2[i] = int(round(max(0, min(num_units - 1, c2))))
+
+    return child1, child2
+
+# Polynomial mutation with distribution index eta=20 and prob=1/n_genes
+def polynomial_mutation(chromosome: list, num_units: int, rng: random.Random) -> list:
+    mutated = list(chromosome)
+    length = len(mutated)
+    mut_prob = 1.0 / length
+
+    for i in range(length):
+        if rng.random() < mut_prob:
+            val = float(mutated[i])
+            u = rng.random()
+            if u <= 0.5:
+                delta = (2.0 * u) ** (1.0 / (ETA_M + 1.0)) - 1.0
+            else:
+                delta = 1.0 - (2.0 * (1.0 - u)) ** (1.0 / (ETA_M + 1.0))
+            new_val = val + delta * (num_units - 1)
+            mutated[i] = int(round(max(0, min(num_units - 1, new_val))))
+
+    return mutated
+
+# Core NSGA-II optimization solver
 def solve_nsga2(fleet, trips, dist_lookup, maint_lookup,
                 pop_size=POPULATION_SIZE, generations=GENERATIONS, seed=SEED):
     rng = random.Random(seed)
     fleet_lookup, trips_lookup = get_lookups(fleet, trips)
-    all_unit_ids = list(fleet_lookup.keys())
-    all_trip_ids = list(trips_lookup.keys())
+    trips_sorted = trips.sort_values("departure_min").reset_index(drop=True)
+    trips_list = trips_sorted.to_dict("records")
+    fleet_list = fleet.to_dict("records")
+    num_units = len(fleet_list)
+    num_trips = len(trips_list)
 
-    # Build seed individual using greedy construction
-    seed_chains, _ = greedy_construction(fleet, trips, dist_lookup)
-    population = [seed_chains]
+    # Group unit indices by rolling stock type
+    type_to_unit_indices = {}
+    for idx, u in enumerate(fleet_list):
+        type_to_unit_indices.setdefault(u["unit_type"], []).append(idx)
 
-    # Initialize population by perturbing greedy schedule
+    # Step 1: Initialize population using greedy_construction() as seed for first chromosome
+    population = []
+    inst = {"fleet": fleet, "trips": trips, "dist_lookup": dist_lookup, "maint_lookup": maint_lookup}
+    greedy_chains = greedy_construction(inst)
+    greedy_chrom = [0] * num_trips
+    uid_to_idx = {u["unit_id"]: idx for idx, u in enumerate(fleet_list)}
+    for uid, c in greedy_chains.items():
+        for tid in c:
+            for i, t in enumerate(trips_list):
+                if t["trip_id"] == tid:
+                    greedy_chrom[i] = uid_to_idx[uid]
+    population.append(greedy_chrom)
+
+    # Fill remaining chromosomes with random unit assignments
     for _ in range(pop_size - 1):
-        ind = copy_chains(seed_chains)
-        for _ in range(rng.randint(2, 5)):
-            ind = mutate(ind, all_unit_ids, all_trip_ids, rng)
-        population.append(ind)
+        chrom = [rng.randint(0, num_units - 1) for _ in range(num_trips)]
+        population.append(chrom)
 
-    history = []
+    history_records = []
 
-    # Evolution loop
+    # Generational evolution loop
     for gen in range(generations):
-        # Evaluate current population
+        # Step 2: Evaluate population objectives
         eval_results = [
-            evaluate_objectives(ind, fleet_lookup, trips_lookup, dist_lookup, maint_lookup)
-            for ind in population
+            evaluate_chromosome(chrom, fleet_list, trips_list, type_to_unit_indices,
+                                trips_lookup, fleet_lookup, dist_lookup, maint_lookup)
+            for chrom in population
         ]
-        objectives = [r[0] for r in eval_results]
-        costs = [r[1] for r in eval_results]
-        breakdowns = [r[2] for r in eval_results]
+        objectives_list = [r[0] for r in eval_results]
 
-        # Fast non-dominated sorting and crowding distance assignment
-        fronts = fast_non_dominated_sort(objectives)
+        # Fast non-dominated sort and crowding distance assignment
+        fronts = fast_non_dominated_sort(objectives_list)
         rank = {}
         crowding = {}
         for r_idx, front in enumerate(fronts):
-            cd = calculate_crowding_distance(front, objectives)
+            cd = compute_crowding_distance(front, objectives_list)
             for idx in front:
                 rank[idx] = r_idx
                 crowding[idx] = cd[idx]
 
-        # Best compromise solution by minimal scalarized total cost
-        min_cost_idx = min(range(len(population)), key=lambda i: costs[i])
-        history.append({
+        # Record generation history metrics
+        best_f1 = min(o[0] for o in objectives_list)
+        best_f2 = min(o[1] for o in objectives_list)
+        best_f3 = min(o[2] for o in objectives_list)
+        n_pareto = len(fronts[0])
+        history_records.append({
+            "generation": gen,
             "step": gen,
-            "best_cost": round(costs[min_cost_idx], 1),
-            "f1_op_cost": round(objectives[min_cost_idx][0], 1),
-            "f2_penalty": round(objectives[min_cost_idx][1], 1)
+            "best_f1": round(best_f1, 1),
+            "best_f2": int(best_f2),
+            "best_f3": round(best_f3, 1),
+            "n_pareto": n_pareto,
+            "best_cost": round(best_f1, 1),
+            "total_cost": round(best_f1, 1),
         })
 
-        # Offspring generation
+        # Step 4 & 5: Selection, SBX crossover, and polynomial mutation to create offspring
         offspring = []
         while len(offspring) < pop_size:
-            p1_idx = crowded_comparison(rng.randint(0, pop_size - 1), rng.randint(0, pop_size - 1), rank, crowding)
-            p2_idx = crowded_comparison(rng.randint(0, pop_size - 1), rng.randint(0, pop_size - 1), rank, crowding)
-            child = crossover(population[p1_idx], population[p2_idx], all_trip_ids, all_unit_ids, rng)
-            if rng.random() < 0.4:
-                child = mutate(child, all_unit_ids, all_trip_ids, rng)
-            offspring.append(child)
+            p1_idx = binary_tournament(rng.randint(0, pop_size - 1), rng.randint(0, pop_size - 1), rank, crowding)
+            p2_idx = binary_tournament(rng.randint(0, pop_size - 1), rng.randint(0, pop_size - 1), rank, crowding)
 
-        # Merge parents and offspring (2N population)
-        combined_pop = population + offspring
+            c1, c2 = sbx_crossover(population[p1_idx], population[p2_idx], num_units, rng)
+            c1 = polynomial_mutation(c1, num_units, rng)
+            c2 = polynomial_mutation(c2, num_units, rng)
+
+            offspring.append(c1)
+            if len(offspring) < pop_size:
+                offspring.append(c2)
+
+        # Step 6: Combine parent and offspring (2N population), re-sort, and select top N
+        combined_population = population + offspring
         combined_eval = [
-            evaluate_objectives(ind, fleet_lookup, trips_lookup, dist_lookup, maint_lookup)
-            for ind in combined_pop
+            evaluate_chromosome(chrom, fleet_list, trips_list, type_to_unit_indices,
+                                trips_lookup, fleet_lookup, dist_lookup, maint_lookup)
+            for chrom in combined_population
         ]
         combined_objs = [r[0] for r in combined_eval]
         combined_fronts = fast_non_dominated_sort(combined_objs)
 
-        # Select next generation through elitist front truncation
-        next_pop = []
+        next_population = []
         for front in combined_fronts:
-            if len(next_pop) + len(front) <= pop_size:
-                next_pop.extend([combined_pop[i] for i in front])
+            if len(next_population) + len(front) <= pop_size:
+                next_population.extend([combined_population[i] for i in front])
             else:
-                cd = calculate_crowding_distance(front, combined_objs)
-                sorted_front = sorted(front, key=lambda idx: cd[idx], reverse=True)
-                needed = pop_size - len(next_pop)
-                next_pop.extend([combined_pop[i] for i in sorted_front[:needed]])
+                cd_front = compute_crowding_distance(front, combined_objs)
+                sorted_front = sorted(front, key=lambda idx: cd_front[idx], reverse=True)
+                needed = pop_size - len(next_population)
+                next_population.extend([combined_population[i] for i in sorted_front[:needed]])
                 break
-        population = next_pop
 
-    # Final evaluation of population
+        population = next_population
+
+    # Final population evaluation
     final_eval = [
-        evaluate_objectives(ind, fleet_lookup, trips_lookup, dist_lookup, maint_lookup)
-        for ind in population
+        evaluate_chromosome(chrom, fleet_list, trips_list, type_to_unit_indices,
+                            trips_lookup, fleet_lookup, dist_lookup, maint_lookup)
+        for chrom in population
     ]
     final_objs = [r[0] for r in final_eval]
-    final_costs = [r[1] for r in final_eval]
-    final_breakdowns = [r[2] for r in final_eval]
     final_fronts = fast_non_dominated_sort(final_objs)
-
-    # First Pareto front solutions
     pareto_indices = final_fronts[0]
-    pareto_points = [
-        {"solution_index": idx, "f1_op_cost": final_objs[idx][0], "f2_penalty": final_objs[idx][1], "total_cost": final_costs[idx]}
-        for idx in pareto_indices
-    ]
 
-    # Best compromise selection
-    best_idx = min(range(len(population)), key=lambda i: final_costs[i])
-    best_chains = copy_chains(population[best_idx])
-    best_cost = final_costs[best_idx]
-    best_breakdown = final_breakdowns[best_idx]
+    # Compute final crowding distances for Pareto front
+    final_crowding = compute_crowding_distance(pareto_indices, final_objs)
 
-    return best_chains, best_cost, best_breakdown, pareto_points, history
+    # Build Pareto front records
+    pareto_points = []
+    for idx in pareto_indices:
+        pareto_points.append({
+            "deadhead_km": round(final_objs[idx][0], 1),
+            "units_used": int(final_objs[idx][1]),
+            "demand_penalty": round(final_objs[idx][2], 1),
+            "rank": 0,
+            "generation": generations,
+            "crowding_distance": final_crowding[idx],
+            "chromosome": population[idx],
+            "chains": final_eval[idx][3],
+            "breakdown": final_eval[idx][2],
+            "scalarized_cost": final_eval[idx][1],
+        })
 
-# Standalone execution entrypoint
-if __name__ == "__main__":
+    # Select best compromise schedule based on minimum scalarized cost
+    best_compromise = min(pareto_points, key=lambda p: p["scalarized_cost"])
+    best_chains = best_compromise["chains"]
+    best_cost = best_compromise["scalarized_cost"]
+    best_breakdown = best_compromise["breakdown"]
+
+    return best_chains, best_cost, best_breakdown, pareto_points, history_records
+
+# Main execution routine
+def main():
     os.makedirs(OUT_DIR, exist_ok=True)
     inst = load_instance()
     fleet, trips, dist_lookup, maint_lookup = inst["fleet"], inst["trips"], inst["dist_lookup"], inst["maint_lookup"]
 
+    print("=================================================================")
+    print("  NSGA-II Multi-Objective Evolutionary Algorithm")
+    print(f"  Fleet: {len(fleet)} units | Trips: {len(trips)} | Population: {POPULATION_SIZE}")
+    print(f"  Generations: {GENERATIONS} | Objectives: (f1: deadhead, f2: units, f3: penalty)")
+    print("=================================================================\n")
+
     # Run NSGA-II solver
-    best_chains, best_cost, best_breakdown, pareto_points, history = solve_nsga2(
+    best_chains, best_cost, best_breakdown, pareto_points, history_records = solve_nsga2(
         fleet, trips, dist_lookup, maint_lookup
     )
 
-    print("NSGA-II best compromise solution cost breakdown:")
+    print("NSGA-II best compromise solution breakdown:")
     print(json.dumps(best_breakdown, indent=2))
+    print(f"\nFinal Pareto optimal solutions count: {len(pareto_points)}")
 
-    # Save schedule dataframe
+    # Save final schedule CSV
     schedule_df = chains_to_schedule_df(best_chains, trips)
     schedule_path = os.path.join(OUT_DIR, "final_schedule.csv")
     schedule_df.to_csv(schedule_path, index=False)
 
-    # Save Pareto front records
-    pareto_df = pd.DataFrame(pareto_points)
-    pareto_path = os.path.join(OUT_DIR, "pareto_front.csv")
-    pareto_df.to_csv(pareto_path, index=False)
+    # Save pareto_front.csv with columns: deadhead_km, units_used, demand_penalty, rank, generation
+    pareto_df = pd.DataFrame(pareto_points)[["deadhead_km", "units_used", "demand_penalty", "rank", "generation"]]
+    pareto_csv_path = os.path.join(OUT_DIR, "pareto_front.csv")
+    pareto_df.to_csv(pareto_csv_path, index=False)
 
-    # Save convergence history
-    history_df = pd.DataFrame(history)
-    history_path = os.path.join(OUT_DIR, "nsga2_cost_history.csv")
-    history_df.to_csv(history_path, index=False)
+    # Save run_summary.json with Pareto stats
+    f1_vals = [p["deadhead_km"] for p in pareto_points]
+    f2_vals = [p["units_used"] for p in pareto_points]
+    f3_vals = [p["demand_penalty"] for p in pareto_points]
+    summary_path = os.path.join(OUT_DIR, "run_summary.json")
+    with open(summary_path, "w") as f:
+        json.dump({
+            "n_pareto_solutions": len(pareto_points),
+            "objectives_summary": {
+                "f1_deadhead_km": {"min": min(f1_vals), "max": max(f1_vals)},
+                "f2_units_used": {"min": min(f2_vals), "max": max(f2_vals)},
+                "f3_demand_penalty": {"min": min(f3_vals), "max": max(f3_vals)},
+            },
+            "best_compromise_breakdown": best_breakdown,
+            "algorithm": "nsga2",
+            "generations": GENERATIONS,
+            "population_size": POPULATION_SIZE,
+        }, f, indent=2)
 
-    # Save convergence plot
-    plot_path = os.path.join(OUT_DIR, "nsga2_convergence.png")
-    plot_cost_history(history, save_path=plot_path, title="NSGA-II Convergence")
+    # Save cost_history.csv with generation, best_f1, best_f2, best_f3, n_pareto
+    cost_hist_df = pd.DataFrame(history_records)[["generation", "best_f1", "best_f2", "best_f3", "n_pareto"]]
+    cost_hist_csv = os.path.join(OUT_DIR, "cost_history.csv")
+    cost_hist_df.to_csv(cost_hist_csv, index=False)
 
-    # Plot Pareto front scatter
-    fig, ax = plt.subplots(figsize=(7, 5))
-    ax.scatter(pareto_df["f1_op_cost"], pareto_df["f2_penalty"], color="#d62728", s=40, edgecolors="k", zorder=3)
-    ax.set_title("NSGA-II Pareto Optimal Front", fontsize=12, fontweight="bold")
-    ax.set_xlabel("Operational Resource Cost (f1)", fontsize=10)
-    ax.set_ylabel("Penalty & Reliability Cost (f2)", fontsize=10)
-    ax.grid(True, linestyle="--", alpha=0.6)
+    # Save cost_history.png via plot_cost_history() using best_f1 per generation
+    plot_cost_path = os.path.join(OUT_DIR, "cost_history.png")
+    plot_cost_history(history_records, "NSGA-II (Best Deadhead km)", plot_cost_path)
+
+    # Save pareto_front.png: 3D scatter of f1 vs f2 vs f3 colored by crowding distance
+    fig = plt.figure(figsize=(9, 6))
+    ax = fig.add_subplot(111, projection="3d")
+    cd_raw = [p["crowding_distance"] for p in pareto_points]
+    finite_cds = [c for c in cd_raw if not np.isinf(c)]
+    max_c = (max(finite_cds) * 1.5) if finite_cds else 1.0
+    cd_colors = [c if not np.isinf(c) else max_c for c in cd_raw]
+
+    scatter = ax.scatter(f1_vals, f2_vals, f3_vals, c=cd_colors, cmap="viridis", s=50, edgecolors="k")
+    ax.set_xlabel("Deadhead Distance (km) [f1]", fontsize=10, labelpad=8)
+    ax.set_ylabel("Units Used [f2]", fontsize=10, labelpad=8)
+    ax.set_zlabel("Demand & Timing Penalty [f3]", fontsize=10, labelpad=8)
+    ax.set_title("NSGA-II Final Pareto Optimal Front (3D)", fontsize=12, fontweight="bold")
+    fig.colorbar(scatter, ax=ax, label="Crowding Distance", pad=0.1)
     plt.tight_layout()
     pareto_img_path = os.path.join(OUT_DIR, "pareto_front.png")
     plt.savefig(pareto_img_path, dpi=300)
     plt.close(fig)
 
-    # Save summary json
-    summary_path = os.path.join(OUT_DIR, "run_summary.json")
-    with open(summary_path, "w") as f:
-        json.dump({"breakdown": best_breakdown, "pareto_count": len(pareto_points), "algorithm": "nsga2"}, f, indent=2)
+    print(f"Saved schedule: {schedule_path}")
+    print(f"Saved Pareto CSV: {pareto_csv_path}")
+    print(f"Saved summary: {summary_path}")
+    print(f"Saved cost history CSV: {cost_hist_csv}")
+    print(f"Saved cost history plot: {plot_cost_path}")
+    print(f"Saved Pareto 3D plot: {pareto_img_path}")
 
-    print(f"Saved: {schedule_path}")
-    print(f"Saved: {pareto_path}")
-    print(f"Saved: {summary_path}")
+# Standalone execution entrypoint
+if __name__ == "__main__":
+    main()
