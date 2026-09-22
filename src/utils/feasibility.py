@@ -56,26 +56,27 @@ def is_feasible_chain(unit_row, trip_ids: list, trips_df, dist_lookup) -> bool:
 
     return True
 
-# Repair chromosome by resolving temporal timing infeasibilities
-def repair_chromosome(chromosome, fleet_list, trips_list, dist_lookup, fleet_lookup=None):
-    # For each gene (trip), check if unit is temporally available
-    # If not, replace with the unit that currently has earliest availability at that station
-    # This is a simple 1-pass repair that removes obvious timing violations
+# Single-pass greedy repair: for each trip in departure order,
+# if assigned unit cannot reach trip origin in time,
+# replace with the unit that has earliest availability.
+def repair_chromosome(chromosome: list, fleet_list: list, trips_list: list,
+                      dist_lookup: dict, *args, **kwargs) -> list:
     repaired = list(chromosome)
-    unit_avail = {idx: fleet_list[idx]["available_from_min"] for idx in range(len(fleet_list))}
-    unit_loc = {idx: fleet_list[idx]["home_depot"] for idx in range(len(fleet_list))}
+    num_units = len(fleet_list)
+    unit_avail = [fleet_list[i]["available_from_min"] for i in range(num_units)]
+    unit_loc = [fleet_list[i]["home_depot"] for i in range(num_units)]
 
     for trip_idx in range(len(repaired)):
         trip = trips_list[trip_idx]
         u_idx = repaired[trip_idx]
         tt, _ = travel(dist_lookup, unit_loc[u_idx], trip["origin_station"])
         if unit_avail[u_idx] + tt > trip["departure_min"]:
-            # Find a feasible unit instead
-            best = min(range(len(fleet_list)),
-                      key=lambda i: abs(unit_avail[i] - trip["departure_min"]))
-            repaired[trip_idx] = best
-            u_idx = best
-        # Update unit state after assignment
+            best_idx = min(range(num_units),
+                           key=lambda i: unit_avail[i] +
+                           travel(dist_lookup, unit_loc[i], trip["origin_station"])[0])
+            repaired[trip_idx] = best_idx
+            u_idx = best_idx
         unit_avail[u_idx] = trip["arrival_min"] + trip["min_turnaround_min"]
         unit_loc[u_idx] = trip["destination_station"]
+
     return repaired
