@@ -1,41 +1,155 @@
-\section{NSGA-II Multi-Objective Optimization Formulation}
+\documentclass[11pt,a4paper]{article}
+\usepackage[utf8]{inputenc}
+\usepackage{amsmath, amssymb, amsfonts}
+\usepackage{algorithm}
+\usepackage{algpseudocode}
+\usepackage{booktabs}
+\usepackage{geometry}
+\usepackage{hyperref}
 
-\subsection{Multi-Objective Vector}
-Rather than scalarizing all objectives into a single cost metric, NSGA-II optimizes a bi-objective vector $\mathbf{F}(\mathbf{X}) = (f_1(\mathbf{X}), f_2(\mathbf{X}))$:
+\geometry{margin=1in}
+
+\title{\textbf{NSGA-II Multi-Objective Evolutionary Algorithm Formulation for Rolling Stock Circulation}}
+\author{Quantum Annealing-Based Rolling Stock Scheduling Research Suite}
+\date{\today}
+
+\begin{document}
+
+\maketitle
+
+\begin{abstract}
+This document outlines the multi-objective mathematical formulation and algorithmic architecture of the Non-dominated Sorting Genetic Algorithm II (NSGA-II) applied to the Rolling Stock Scheduling and Circulation Problem. We formally define Pareto dominance, the 3-objective formulation ($f_1, f_2, f_3$), Deb et al.'s Fast Non-Dominated Sorting algorithm, and the crowding distance metric for diversity preservation.
+\end{abstract}
+
+\section{Introduction}
+Real-world rolling stock circulation involves conflicting operational trade-offs that cannot be accurately captured by an ad-hoc single scalarized objective. NSGA-II provides an elitist multi-objective evolutionary framework capable of discovering a diverse Pareto-optimal front of compromise circulation schedules without requiring prior scalarization weights.
+
+\section{Multi-Objective Problem Formulation}
+Let $\mathbf{x} \in \Omega$ denote a candidate schedule chromosome encoding unit assignments across $N = |T|$ timetable trips. NSGA-II simultaneously minimizes three competing objective functions:
+\begin{equation}
+    \min_{\mathbf{x} \in \Omega} \quad \mathbf{F}(\mathbf{x}) = \begin{pmatrix} f_1(\mathbf{x}) \\ f_2(\mathbf{x}) \\ f_3(\mathbf{x}) \end{pmatrix}
+\end{equation}
+where:
 \begin{align}
-    f_1(\mathbf{X}) &= \mathcal{D}(\mathbf{X}) + W_{\text{unit}} \cdot \mathcal{U}(\mathbf{X}) \quad &&\text{(Operational Resource Consumption)} \\
-    f_2(\mathbf{X}) &= W_{\text{demand}} \cdot \mathcal{P}(\mathbf{X}) + W_{\text{maint}} \cdot \mathcal{M}(\mathbf{X}) + W_{\text{timing}} \cdot \mathcal{V}_{\text{time}}(\mathbf{X}) \quad &&\text{(Reliability and Constraint Penalties)}
+    f_1(\mathbf{x}) &= \text{deadhead\_km}(\mathbf{x}) \quad &&\text{(Total empty repositioning distance)} \\
+    f_2(\mathbf{x}) &= \text{units\_used}(\mathbf{x}) \quad &&\text{(Fleet size / capital trainset deployment)} \\
+    f_3(\mathbf{x}) &= \text{uncovered\_demand}(\mathbf{x}) + 100 \cdot \text{timing\_violations}(\mathbf{x}) \quad &&\text{(Service quality \& constraint penalty)}
 \end{align}
 
+\section{Pareto Optimality Definitions}
+
 \subsection{Pareto Dominance}
-A candidate solution $\mathbf{X}_1$ is said to strictly dominate $\mathbf{X}_2$ (denoted $\mathbf{X}_1 \prec \mathbf{X}_2$) if and only if:
+A solution $\mathbf{x}_1 \in \Omega$ is said to \textbf{dominate} solution $\mathbf{x}_2 \in \Omega$ (denoted $\mathbf{x}_1 \prec \mathbf{x}_2$) if and only if:
 \begin{equation}
-    \forall m \in \{1, 2\}, \quad f_m(\mathbf{X}_1) \le f_m(\mathbf{X}_2) \quad \text{and} \quad \exists m \in \{1, 2\}, \quad f_m(\mathbf{X}_1) < f_m(\mathbf{X}_2)
+    \forall m \in \{1, 2, 3\}, \quad f_m(\mathbf{x}_1) \le f_m(\mathbf{x}_2) \quad \text{and} \quad \exists m \in \{1, 2, 3\}, \quad f_m(\mathbf{x}_1) < f_m(\mathbf{x}_2)
 \end{equation}
 
-\subsection{Fast Non-Dominated Sorting}
-The combined population $\mathcal{R}_t = \mathcal{P}_t \cup \mathcal{Q}_t$ of size $2N$ is partitioned into hierarchical non-dominated fronts:
-\begin{equation}
-    \mathcal{F} = (\mathcal{F}_1, \mathcal{F}_2, \dots, \mathcal{F}_K)
-\end{equation}
-where $\mathcal{F}_1$ is the set of non-dominated solutions in $\mathcal{R}_t$, and each subsequent front $\mathcal{F}_{k}$ is formed by identifying non-dominated solutions within $\mathcal{R}_t \setminus \bigcup_{j=1}^{k-1} \mathcal{F}_j$.
+\subsection{Pareto Optimality and Pareto Front}
+A solution $\mathbf{x}^* \in \Omega$ is \textbf{Pareto optimal} if there exists no other feasible solution $\mathbf{x} \in \Omega$ such that $\mathbf{x} \prec \mathbf{x}^*$.
 
-\subsection{Crowding Distance Metric}
-For each front $\mathcal{F}_k$, solutions are ranked along each objective axis $m \in \{1, 2\}$. Boundary solutions are assigned infinite distance:
+The set of all Pareto optimal decision vectors is the \textbf{Pareto Optimal Set} $\mathcal{P}^*$:
 \begin{equation}
-    I(1)_{\text{dist}} = I(|\mathcal{F}_k|)_{\text{dist}} = \infty
+    \mathcal{P}^* = \left\{ \mathbf{x}^* \in \Omega \mid \nexists \, \mathbf{x} \in \Omega \text{ such that } \mathbf{x} \prec \mathbf{x}^* \right\}
 \end{equation}
-For intermediate indices $j \in \{2, \dots, |\mathcal{F}_k| - 1\}$:
+The image of $\mathcal{P}^*$ in objective space constitutes the \textbf{Pareto Front} $\mathcal{PF}^*$:
 \begin{equation}
-    I(j)_{\text{dist}} = \sum_{m=1}^2 \frac{f_m(I(j+1)) - f_m(I(j-1))}{f_m^{\text{max}} - f_m^{\text{min}}}
+    \mathcal{PF}^* = \left\{ \mathbf{F}(\mathbf{x}^*) \in \mathbb{R}^3 \mid \mathbf{x}^* \in \mathcal{P}^* \right\}
 \end{equation}
 
-\subsection{Crowded Tournament Comparison}
-The crowded comparison operator $\prec_n$ governs selection between solutions $i$ and $j$:
-\begin{equation}
-    i \prec_n j \iff (r_i < r_j) \lor (r_i = r_j \land i_{\text{dist}} > j_{\text{dist}})
-\end{equation}
-where $r_i$ denotes the non-domination rank of solution $i$.
+\section{Fast Non-Dominated Sorting (Deb et al. 2002)}
+The fast non-dominated sorting procedure partitions a population $\mathcal{R}$ of size $2N$ into hierarchical Pareto fronts $\mathcal{F} = (\mathcal{F}_1, \mathcal{F}_2, \dots, \mathcal{F}_K)$ in $\mathcal{O}(M N^2)$ operations, where $M = 3$ is the number of objectives.
 
-\subsection{Elitist Survivor Selection}
-Successive population $\mathcal{P}_{t+1}$ is populated front-by-front until adding the next front $\mathcal{F}_l$ exceeds capacity $N$. The remaining slots are filled by sorting $\mathcal{F}_l$ in descending order of crowding distance.
+For each individual $p \in \mathcal{R}$, two entities are maintained:
+\begin{enumerate}
+    \item $S_p$: The set of individuals that individual $p$ dominates.
+    \item $n_p$: The domination count (number of individuals that dominate individual $p$).
+\end{enumerate}
+
+\begin{algorithm}[H]
+\caption{Fast Non-Dominated Sort (Deb et al. 2002)}
+\label{alg:fast_sort}
+\begin{algorithmic}[1]
+\Require Population $\mathcal{R}$ of size $2N$
+\Ensure Partitioned Pareto fronts $\mathcal{F}_1, \mathcal{F}_2, \dots$
+\For{each $p \in \mathcal{R}$}
+    \State $S_p \gets \emptyset$, $n_p \gets 0$
+    \For{each $q \in \mathcal{R}$}
+        \If{$p \prec q$}
+            \State $S_p \gets S_p \cup \{q\}$
+        \ElsIf{$q \prec p$}
+            \State $n_p \gets n_p + 1$
+        \EndIf
+    \EndFor
+    \If{$n_p = 0$}
+        \State $p_{\text{rank}} \gets 1$, Add $p$ to $\mathcal{F}_1$
+    \EndIf
+\EndFor
+\State $i \gets 1$
+\While{$\mathcal{F}_i \ne \emptyset$}
+    \State $\mathcal{H} \gets \emptyset$
+    \For{each $p \in \mathcal{F}_i$}
+        \For{each $q \in S_p$}
+            \State $n_q \gets n_q - 1$
+            \If{$n_q = 0$}
+                \State $q_{\text{rank}} \gets i + 1$, Add $q$ to $\mathcal{H}$
+            \EndIf
+        \EndFor
+    \EndFor
+    \State $i \gets i + 1$, $\mathcal{F}_i \gets \mathcal{H}$
+\EndWhile
+\State \Return $\mathcal{F}_1, \mathcal{F}_2, \dots$
+\end{algorithmic}
+\end{algorithm}
+
+\section{Crowding Distance Metric}
+To preserve population diversity along each front without specifying niching parameters, NSGA-II assigns a crowding distance metric $d_i$ representing the density of solutions surrounding individual $i$.
+
+For a non-dominated front $\mathcal{I} = \{1, 2, \dots, l\}$:
+\begin{enumerate}
+    \item Initialize distance for all solutions: $d_i \gets 0$ for all $i \in \mathcal{I}$.
+    \item For each objective dimension $m \in \{1, 2, 3\}$:
+    \begin{itemize}
+        \item Sort front $\mathcal{I}$ in ascending order based on objective value $f_m$.
+        \item Assign infinite distance to the boundary solutions:
+        \begin{equation}
+            d_{\mathcal{I}[1]} \gets \infty, \quad d_{\mathcal{I}[l]} \gets \infty
+        \end{equation}
+        \item For intermediate indices $j \in \{2, \dots, l-1\}$, update crowding distance:
+        \begin{equation}
+            d_{\mathcal{I}[j]} \gets d_{\mathcal{I}[j]} + \frac{f_m(\mathcal{I}[j+1]) - f_m(\mathcal{I}[j-1])}{f_m^{\max} - f_m^{\min}}
+        \end{equation}
+        where $f_m^{\max}$ and $f_m^{\min}$ denote the maximum and minimum values of objective $m$ in front $\mathcal{I}$.
+    \end{itemize}
+\end{enumerate}
+
+\section{Crowded Tournament Selection and Elitist Loop}
+During binary tournament selection, individual $i$ is preferred over individual $j$ (denoted $i \prec_n j$) using the crowded comparison operator:
+\begin{equation}
+    i \prec_n j \iff (r_i < r_j) \lor (r_i = r_j \land d_i > d_j)
+\end{equation}
+where $r_i$ is the Pareto front rank and $d_i$ is the crowding distance.
+
+\begin{algorithm}[H]
+\caption{NSGA-II Generational Replacement Loop}
+\label{alg:nsga2_loop}
+\begin{algorithmic}[1]
+\Require Parent population $\mathcal{P}_t$ of size $N$, Offspring population $\mathcal{Q}_t$ of size $N$
+\Ensure Next generation parent population $\mathcal{P}_{t+1}$ of size $N$
+\State Combine populations: $\mathcal{R}_t \gets \mathcal{P}_t \cup \mathcal{Q}_t$ \Comment{Size $2N$}
+\State Compute Pareto fronts: $\mathcal{F} \gets \text{FastNonDominatedSort}(\mathcal{R}_t)$
+\State $\mathcal{P}_{t+1} \gets \emptyset$, $i \gets 1$
+\While{$|\mathcal{P}_{t+1}| + |\mathcal{F}_i| \le N$}
+    \State $\text{ComputeCrowdingDistance}(\mathcal{F}_i)$
+    \State $\mathcal{P}_{t+1} \gets \mathcal{P}_{t+1} \cup \mathcal{F}_i$
+    \State $i \gets i + 1$
+\EndWhile
+\If{$|\mathcal{P}_{t+1}| < N$}
+    \State $\text{ComputeCrowdingDistance}(\mathcal{F}_i)$
+    \State Sort $\mathcal{F}_i$ in descending order of crowding distance $d$
+    \State Add top $(N - |\mathcal{P}_{t+1}|)$ individuals of $\mathcal{F}_i$ to $\mathcal{P}_{t+1}$
+\EndIf
+\State \Return $\mathcal{P}_{t+1}$
+\end{algorithmic}
+\end{algorithm}
+
+\end{document}

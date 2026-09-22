@@ -1,96 +1,154 @@
-\section{Rolling Stock Scheduling: Mathematical Problem Formulation}
+\documentclass[11pt,a4paper]{article}
+\usepackage[utf8]{inputenc}
+\usepackage{amsmath, amssymb, amsfonts}
+\usepackage{algorithm}
+\usepackage{algpseudocode}
+\usepackage{booktabs}
+\usepackage{geometry}
+\usepackage{hyperref}
 
-\subsection{Sets and Indices}
+\geometry{margin=1in}
+
+\title{\textbf{Mixed-Integer Linear Programming Formulation for Rolling Stock Scheduling and Circulation}}
+\author{Quantum Annealing-Based Rolling Stock Scheduling Research Suite}
+\date{\today}
+
+\begin{document}
+
+\maketitle
+
+\begin{abstract}
+This document presents the complete Mixed-Integer Linear Programming (MILP) formulation for the Rolling Stock Scheduling and Circulation Problem. The model simultaneously determines trainset-to-trip assignments, multi-unit consist coupling configurations, deadhead repositioning arcs, and periodic maintenance mileage bounds under rigid temporal and spatial station turnarounds.
+\end{abstract}
+
+\section{Sets and Indices}
 \begin{itemize}
     \item $U$: Set of rolling stock trainset units, indexed by $u \in U$.
-    \item $T$: Set of revenue passenger trips, indexed by $i, j \in T$.
-    \item $S$: Set of stations in the railway network, indexed by $s \in S$.
-    \item $D \subseteq S$: Subset of stations designated as depot facilities.
-    \item $D_{\text{maint}} \subseteq D$: Subset of depots equipped with maintenance workshops.
+    \item $T$: Set of revenue passenger timetable trips, indexed by $i, j \in T$, sorted by scheduled departure time.
+    \item $S$: Set of stations across the railway network, indexed by $s \in S$.
+    \item $D \subseteq S$: Subset of railway stations designated as overnight stabling depots.
+    \item $D_{\text{maint}} \subseteq D$: Subset of depots equipped with specialized maintenance workshops.
 \end{itemize}
 
-\subsection{Parameters}
+\section{Problem Parameters}
+\subsection{Trip Attributes ($\forall i \in T$)}
 \begin{itemize}
-    \item Trip parameters for each $i \in T$:
-    \begin{itemize}
-        \item $o_i, d_i \in S$: Origin and destination stations.
-        \item $\text{dep}_i, \text{arr}_i \in \mathbb{R}_+$: Scheduled departure and arrival times (minutes from midnight).
-        \item $\tau_i \in \mathbb{R}_+$: Minimum required turnaround time at destination $d_i$.
-        \item $\ell_i \in \mathbb{R}_+$: Scheduled track distance of trip $i$ (km).
-        \item $\rho_i \in \mathbb{Z}_+$: Peak/expected passenger demand count for trip $i$.
-    \end{itemize}
-    \item Unit parameters for each $u \in U$:
-    \begin{itemize}
-        \item $c_u \in \mathbb{Z}_+$: Nominal seated passenger capacity of unit $u$.
-        \item $h_u \in D$: Initial stabling home depot of unit $u$.
-        \item $a_u \in \mathbb{R}_+$: Earliest availability timestamp of unit $u$ at depot $h_u$.
-        \item $\mu_u \in \mathbb{R}_+$: Mileage accumulated since last overhaul inspection (km).
-        \item $M_{\text{type}(u)} \in \mathbb{R}_+$: Maximum permissible run distance prior to required maintenance.
-    \end{itemize}
-    \item Network topology parameters for station pairs $(s_1, s_2) \in S \times S$:
-    \begin{itemize}
-        \item $t(s_1, s_2) \in \mathbb{R}_+$: Deadhead transit runtime between stations (minutes).
-        \item $\delta(s_1, s_2) \in \mathbb{R}_+$: Track distance between stations (km).
-    \end{itemize}
+    \item $o_i, d_i \in S$: Origin and destination stations of trip $i$.
+    \item $\text{dep}_i, \text{arr}_i \in \mathbb{R}_+$: Scheduled departure and arrival timestamps (minutes from midnight).
+    \item $\tau_i \in \mathbb{R}_+$: Minimum required turnaround and cleaning buffer at destination $d_i$.
+    \item $\ell_i \in \mathbb{R}_+$: Scheduled revenue track distance of trip $i$ (km).
+    \item $\rho_i \in \mathbb{Z}_+$: Forecasted peak passenger seat demand for trip $i$.
 \end{itemize}
 
-\subsection{Decision Variables}
+\subsection{Fleet Unit Attributes ($\forall u \in U$)}
 \begin{itemize}
-    \item $x_{u,i} \in \{0, 1\}$: Binary variable equal to 1 if rolling stock unit $u$ is assigned to trip $i$, and 0 otherwise.
-    \item $y_{u,i,j} \in \{0, 1\}$: Binary transition variable indicating unit $u$ operates trip $j$ immediately following trip $i$.
-    \item $y^0_{u,i} \in \{0, 1\}$: Binary variable indicating unit $u$ departs from depot $h_u$ to serve trip $i$ as its initial assignment.
-    \item $z_u \in \{0, 1\}$: Binary variable indicating if rolling stock unit $u$ is active during the operating horizon.
-    \item $s_i^{\text{dem}} \ge 0$: Uncovered passenger demand slack variable for trip $i$.
-    \item $v_{u,i,j}^{\text{time}} \ge 0$: Timing shortfall violation for consecutive transition $(i, j)$ on unit $u$.
+    \item $c_u \in \mathbb{Z}_+$: Nominal passenger seating capacity of unit $u$.
+    \item $h_u \in D$: Initial home depot of unit $u$.
+    \item $a_u \in \mathbb{R}_+$: Earliest availability timestamp of unit $u$ at depot $h_u$.
+    \item $\mu_u^{\text{init}} \in \mathbb{R}_+$: Accumulated mileage since the last major maintenance overhaul (km).
+    \item $M_{\text{type}(u)} \in \mathbb{R}_+$: Maximum allowable operating distance prior to required maintenance inspection.
 \end{itemize}
 
-\subsection{Constraints}
-\paragraph{1. Passenger Demand Satisfaction}
-\begin{equation}
-    \sum_{u \in U} c_u x_{u,i} + s_i^{\text{dem}} \ge \rho_i, \quad \forall i \in T
-\end{equation}
+\subsection{Network and Cost Parameters}
+\begin{itemize}
+    \item $t(s_1, s_2) \in \mathbb{R}_+$: Deadhead travel runtime between stations $s_1, s_2 \in S$ ($t(s, s) = 0$).
+    \item $\delta(s_1, s_2) \in \mathbb{R}_+$: Deadhead track distance between stations $s_1, s_2 \in S$ ($\delta(s, s) = 0$).
+    \item $W_{\text{deadhead}}$: Weight penalty per empty deadhead kilometer ($1.0$).
+    \item $W_{\text{unit}}$: Fixed operating cost per activated trainset unit ($150.0$).
+    \item $W_{\text{maint}}$: Penalty cost per kilometer exceeding the maintenance threshold ($5.0$).
+    \item $W_{\text{demand}}$: Penalty cost per uncovered passenger seat demand ($2.0$).
+    \item $W_{\text{timing}}$: Penalty cost per minute of infeasible transition shortfall ($1000.0$).
+    \item $M_{\text{big}}$: Sufficiently large positive scalar used in disjunctive constraints.
+\end{itemize}
 
-\paragraph{2. Flow Conservation along Circulation Chains}
-\begin{equation}
-    y^0_{u,i} + \sum_{j \in T \setminus \{i\}} y_{u,j,i} = x_{u,i}, \quad \forall u \in U, \forall i \in T
-\end{equation}
-\begin{equation}
-    \sum_{j \in T \setminus \{i\}} y_{u,i,j} \le x_{u,i}, \quad \forall u \in U, \forall i \in T
-\end{equation}
-\begin{equation}
-    \sum_{i \in T} y^0_{u,i} \le z_u, \quad \forall u \in U
-\end{equation}
+\section{Decision Variables}
+\begin{itemize}
+    \item $x_{u,i} \in \{0, 1\}$: Binary variable equal to $1$ if unit $u$ is assigned to trip $i$, and $0$ otherwise.
+    \item $y_{u,i,j} \in \{0, 1\}$: Binary variable equal to $1$ if unit $u$ serves trip $j$ immediately following trip $i$.
+    \item $y^0_{u,i} \in \{0, 1\}$: Binary variable equal to $1$ if unit $u$ departs from depot $h_u$ to serve trip $i$ as its initial trip.
+    \item $y^*_{u,i} \in \{0, 1\}$: Binary variable equal to $1$ if trip $i$ is the final trip of unit $u$ returning to depot.
+    \item $z_u \in \{0, 1\}$: Binary variable equal to $1$ if rolling stock unit $u$ is activated.
+    \item $s_i^{\text{dem}} \ge 0$: Continuous slack variable representing uncovered passenger demand on trip $i$.
+    \item $v_{u,i,j}^{\text{time}} \ge 0$: Continuous slack representing timing shortfall on transition $(i, j)$ for unit $u$.
+    \item $m_{u,i} \ge 0$: Continuous state variable representing the cumulative mileage of unit $u$ upon completing trip $i$.
+    \item $v_u^{\text{maint}} \ge 0$: Continuous slack representing maintenance mileage limit violation for unit $u$.
+\end{itemize}
 
-\paragraph{3. Unit Activation Linking}
-\begin{equation}
-    x_{u,i} \le z_u, \quad \forall u \in U, \forall i \in T
-\end{equation}
+\section{Mathematical Formulation}
 
-\paragraph{4. Temporal and Spatial Feasibility}
-For every consecutive transition $(i, j)$ operated by unit $u$:
-\begin{equation}
-    \text{arr}_i + \tau_i + t(d_i, o_j) - \text{dep}_j \le v_{u,i,j}^{\text{time}} + M (1 - y_{u,i,j}), \quad \forall u \in U, \forall i, j \in T
-\end{equation}
-For initial depot pull-out:
-\begin{equation}
-    a_u + t(h_u, o_i) - \text{dep}_i \le M (1 - y^0_{u,i}), \quad \forall u \in U, \forall i \in T
-\end{equation}
-
-\paragraph{5. Mileage Maintenance Bounding}
-Let $\mathcal{C}_u$ denote the ordered sequence of trips assigned to unit $u$. Total cumulative distance must satisfy:
-\begin{equation}
-    \mu_u + \sum_{i \in \mathcal{C}_u} \left( \delta(d_{\text{prev}(i)}, o_i) + \ell_i \right) \le M_{\text{type}(u)} + v_u^{\text{maint}}, \quad \forall u \in U
-\end{equation}
-
-\subsection{Comprehensive Objective Function}
-\begin{equation}
-    \min \quad \mathcal{J} = W_{\text{deadhead}} \cdot \mathcal{D} + W_{\text{unit}} \cdot \mathcal{U} + W_{\text{maint}} \cdot \mathcal{M} + W_{\text{demand}} \cdot \mathcal{P} + W_{\text{timing}} \cdot \mathcal{V}_{\text{time}}
-\end{equation}
-where:
+\subsection{Objective Function}
+The objective minimizes total operational costs, fleet deployment expenses, passenger demand shortfalls, and constraint penalties:
+\begin{align}
+    \min \quad \mathcal{J} = \; & W_{\text{deadhead}} \cdot \mathcal{D} + W_{\text{unit}} \cdot \mathcal{U} + W_{\text{maint}} \cdot \mathcal{M} \nonumber \\
+    & + W_{\text{demand}} \cdot \mathcal{P} + W_{\text{timing}} \cdot \mathcal{V}_{\text{time}}
+\end{align}
+where the individual cost components are defined as:
 \begin{align}
     \mathcal{D} &= \sum_{u \in U} \left[ \sum_{i \in T} \delta(h_u, o_i) y^0_{u,i} + \sum_{i \in T} \sum_{j \in T \setminus \{i\}} \delta(d_i, o_j) y_{u,i,j} \right] \\
     \mathcal{U} &= \sum_{u \in U} z_u \\
     \mathcal{M} &= \sum_{u \in U} v_u^{\text{maint}} \\
     \mathcal{P} &= \sum_{i \in T} s_i^{\text{dem}} \\
-    \mathcal{V}_{\text{time}} &= \sum_{u \in U} \sum_{i \in T} \sum_{j \in T} v_{u,i,j}^{\text{time}}
+    \mathcal{V}_{\text{time}} &= \sum_{u \in U} \sum_{i \in T} \sum_{j \in T \setminus \{i\}} v_{u,i,j}^{\text{time}}
 \end{align}
+
+\subsection{Constraints}
+
+\paragraph{1. Passenger Demand Satisfaction}
+Each trip must satisfy passenger demand through assigned trainset capacities, with slack penalized in the objective:
+\begin{align}
+    \sum_{u \in U} c_u x_{u,i} + s_i^{\text{dem}} \ge \rho_i, \quad \forall i \in T
+\end{align}
+
+\paragraph{2. Flow Conservation along Unit Circulation Chains}
+Every assigned unit must enter and exit each assigned trip exactly once:
+\begin{align}
+    y^0_{u,i} + \sum_{j \in T \setminus \{i\}} y_{u,j,i} &= x_{u,i}, \quad \forall u \in U, \; \forall i \in T \\
+    y^*_{u,i} + \sum_{j \in T \setminus \{i\}} y_{u,i,j} &= x_{u,i}, \quad \forall u \in U, \; \forall i \in T
+\end{align}
+
+\paragraph{3. Depot Departure and Activation Linking}
+A unit can depart from its depot at most once, and may only be assigned trips if activated:
+\begin{align}
+    \sum_{i \in T} y^0_{u,i} &\le z_u, \quad \forall u \in U \\
+    x_{u,i} &\le z_u, \quad \forall u \in U, \; \forall i \in T
+\end{align}
+
+\paragraph{4. Temporal Feasibility and Turnaround Bounds}
+For initial depot pull-out:
+\begin{align}
+    a_u + t(h_u, o_i) - \text{dep}_i \le M_{\text{big}} (1 - y^0_{u,i}), \quad \forall u \in U, \; \forall i \in T
+\end{align}
+For consecutive trip transitions $(i, j)$:
+\begin{align}
+    \text{arr}_i + \tau_i + t(d_i, o_j) - \text{dep}_j \le v_{u,i,j}^{\text{time}} + M_{\text{big}} (1 - y_{u,i,j}), \quad \forall u \in U, \; \forall i, j \in T, \; i \ne j
+\end{align}
+
+\paragraph{5. Maintenance Mileage Accumulation Recurrence}
+Cumulative mileage accumulates along the circulation chain from the initial depot departure through each successive revenue and deadhead trip. The recurrence relations are formulated as follows:
+
+For the initial trip departing from depot $h_u$:
+\begin{align}
+    m_{u,i} \ge \mu_u^{\text{init}} + \delta(h_u, o_i) + \ell_i - M_{\text{big}} (1 - y^0_{u,i}), \quad \forall u \in U, \; \forall i \in T
+\end{align}
+For subsequent consecutive transitions $(i, j)$:
+\begin{align}
+    m_{u,j} \ge m_{u,i} + \delta(d_i, o_j) + \ell_j - M_{\text{big}} (1 - y_{u,i,j}), \quad \forall u \in U, \; \forall i, j \in T, \; i \ne j
+\end{align}
+The maintenance violation slack $v_u^{\text{maint}}$ captures any distance operated beyond the permissible limit:
+\begin{align}
+    v_u^{\text{maint}} &\ge m_{u,i} - M_{\text{type}(u)} - M_{\text{big}} (1 - x_{u,i}), \quad \forall u \in U, \; \forall i \in T \\
+    v_u^{\text{maint}} &\ge 0, \quad \forall u \in U
+\end{align}
+
+\paragraph{6. Integrality and Variable Domains}
+\begin{align}
+    x_{u,i} &\in \{0, 1\}, \quad \forall u \in U, \; \forall i \in T \\
+    y_{u,i,j} &\in \{0, 1\}, \quad \forall u \in U, \; \forall i, j \in T \\
+    y^0_{u,i}, y^*_{u,i} &\in \{0, 1\}, \quad \forall u \in U, \; \forall i \in T \\
+    z_u &\in \{0, 1\}, \quad \forall u \in U \\
+    s_i^{\text{dem}} &\ge 0, \quad \forall i \in T \\
+    v_{u,i,j}^{\text{time}} &\ge 0, \quad \forall u \in U, \; \forall i, j \in T \\
+    m_{u,i} &\ge 0, \quad \forall u \in U, \; \forall i \in T
+\end{align}
+
+\end{document}

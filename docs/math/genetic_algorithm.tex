@@ -1,39 +1,157 @@
-\section{Genetic Algorithm Formulation}
+\documentclass[11pt,a4paper]{article}
+\usepackage[utf8]{inputenc}
+\usepackage{amsmath, amssymb, amsfonts}
+\usepackage{algorithm}
+\usepackage{algpseudocode}
+\usepackage{booktabs}
+\usepackage{geometry}
+\usepackage{hyperref}
 
-\subsection{Chromosome Encoding}
-A candidate chromosome $\mathbf{X}$ represents the assignment mapping $\Gamma: T \to 2^U$, where each trip $i \in T$ is assigned a non-empty subset of rolling stock units $\Gamma(i) \subseteq U$. In dual representation:
+\geometry{margin=1in}
+
+\title{\textbf{Genetic Algorithm Formulation for Rolling Stock Scheduling: Chromosome Encoding, PMX Crossover, and Schema Analysis}}
+\author{Quantum Annealing-Based Rolling Stock Scheduling Research Suite}
+\date{\today}
+
+\begin{document}
+
+\maketitle
+
+\begin{abstract}
+This document details the mathematical formulation of the Genetic Algorithm (GA) designed for the Rolling Stock Scheduling and Circulation Problem. We provide the discrete chromosome representation, Partially Mapped Crossover (PMX) operator, penalized fitness evaluation incorporating a 10$\times$ timing violation penalty multiplier, and a theoretical analysis grounded in Holland's Schema Theorem.
+\end{abstract}
+
+\section{Introduction}
+Genetic Algorithms are population-based stochastic global optimization methods inspired by natural evolution. By operating over a diverse population of candidate schedules simultaneously, GA navigates multi-modal search landscapes through selection, crossover, and mutation operators.
+
+\section{Chromosome Encoding}
+Let $T = (i_1, i_2, \dots, i_N)$ be the set of $N = |T|$ timetable trips sorted strictly in ascending order of departure time ($\text{dep}_{i_1} \le \text{dep}_{i_2} \le \dots \le \text{dep}_{i_N}$).
+
+A candidate schedule is encoded as a discrete integer chromosome vector $\mathbf{g}$ of length $N$:
 \begin{equation}
-    \mathbf{X} = \{ \mathcal{C}_u \mid u \in U \}
+    \mathbf{g} = \left( g_1, g_2, \dots, g_N \right) \in \{0, 1, \dots, |U|-1\}^N
 \end{equation}
-where $\mathcal{C}_u$ is the chronological permutation of trips served by trainset $u$.
+where each gene $g_k \in \{0, 1, \dots, |U|-1\}$ represents the integer index of the primary rolling stock unit $u \in U$ assigned to operate timetable trip $i_k$.
 
-\subsection{Fitness Function}
-The fitness measure $F(\mathbf{X})$ is defined inversely relative to the scalarized penalization cost $\mathcal{J}(\mathbf{X})$:
+\paragraph{Consist Coupling Rule:}
+If passenger demand for trip $i_k$ exceeds the passenger capacity of the primary assigned unit, $\rho_{i_k} > c_{g_k}$, an auxiliary unit $g'_k \in U \setminus \{g_k\}$ of identical unit type is coupled to satisfy the passenger shortfall:
 \begin{equation}
-    F(\mathbf{X}) = \frac{1}{1 + \mathcal{J}(\mathbf{X})}
-\end{equation}
-where $\mathcal{J}(\mathbf{X})$ incorporates deadhead distance, unit activation counts, maintenance breaches, uncovered passenger demand, and timing infeasibilities.
-
-\subsection{Selection: Tournament Mechanism}
-For population $\mathcal{P} = \{ \mathbf{X}_1, \dots, \mathbf{X}_N \}$, parents are chosen via tournament selection with tournament size $k = 3$:
-\begin{equation}
-    \mathbf{X}_{\text{parent}} = \arg\max_{\mathbf{X} \in \Omega_{\text{sample}}} F(\mathbf{X}), \quad |\Omega_{\text{sample}}| = k
-\end{equation}
-
-\subsection{Recombination (Crossover)}
-Given parent schedules $\mathbf{X}_A$ and $\mathbf{X}_B$, uniform trip-level gene crossover produces offspring $\mathbf{X}_C$:
-\begin{equation}
-    \Gamma_C(i) = 
+    \Gamma(i_k) = 
     \begin{cases}
-        \Gamma_A(i), & \text{with probability } p_c = 0.5 \\
-        \Gamma_B(i), & \text{with probability } 1 - p_c = 0.5
+        \{g_k\}, & \text{if } c_{g_k} \ge \rho_{i_k} \\
+        \{g_k, g'_k\}, & \text{if } c_{g_k} < \rho_{i_k}
     \end{cases}
-    \quad \forall i \in T
 \end{equation}
 
-\subsection{Mutation and Elitism}
-With probability $p_m$, offspring $\mathbf{X}_C$ undergoes stochastic perturbation using relocate, swap, or consist resizing operators:
+\section{Penalized Cost and Fitness Function}
+To strongly guide the evolutionary search away from infeasible transit transitions, a steep penalty multiplier $\lambda_{\text{timing}} = 10.0$ is applied to all temporal and spatial constraint violations.
+
+\subsection{Penalized Total Cost}
+Given the raw evaluation metrics computed across all unit circulation chains:
+\begin{align}
+    \mathcal{J}_{\text{penalized}}(\mathbf{g}) = \; & W_{\text{deadhead}} \cdot \mathcal{D}(\mathbf{g}) + W_{\text{unit}} \cdot \mathcal{U}(\mathbf{g}) + W_{\text{maint}} \cdot \mathcal{M}(\mathbf{g}) \nonumber \\
+    & + W_{\text{demand}} \cdot \mathcal{P}(\mathbf{g}) + \left(\lambda_{\text{timing}} \cdot W_{\text{timing}}\right) \cdot \mathcal{V}_{\text{time}}(\mathbf{g})
+\end{align}
+where:
+\begin{itemize}
+    \item $\mathcal{D}(\mathbf{g})$: Total empty deadhead repositioning kilometers.
+    \item $\mathcal{U}(\mathbf{g})$: Total number of distinct rolling stock units activated.
+    \item $\mathcal{M}(\mathbf{g})$: Total kilometers operated beyond maintenance overhaul limits.
+    \item $\mathcal{P}(\mathbf{g})$: Total uncovered passenger demand count.
+    \item $\mathcal{V}_{\text{time}}(\mathbf{g})$: Count of spatio-temporal arc timing violations along unit circulation chains.
+    \item $\lambda_{\text{timing}} = 10.0$: Penalty multiplier elevating timing violation penalty to $10 \times 1000.0 = 10,000.0$ per infeasible transit.
+\end{itemize}
+
+\subsection{Fitness Mapping}
+Selection operates to maximize fitness $f(\mathbf{g})$, defined inversely proportional to the penalized cost:
 \begin{equation}
-    \mathbf{X}_C \leftarrow \mathcal{M}(\mathbf{X}_C)
+    f(\mathbf{g}) = \frac{1}{1 + \mathcal{J}_{\text{penalized}}(\mathbf{g})}
 \end{equation}
-Elitism strictly preserves the top-performing individual $\mathbf{X}^* = \arg\min_{\mathbf{X} \in \mathcal{P}} \mathcal{J}(\mathbf{X})$ into generation $g+1$ without modification.
+
+\section{Genetic Operators}
+
+\subsection{1. Tournament Selection}
+To select parents from the current population $\mathcal{P}$ of size $N_{\text{pop}} = 80$, tournament selection with tournament size $k = 5$ is employed. A random subset $\Omega \subset \mathcal{P}$ with $|\Omega| = 5$ is drawn, and the individual with minimum penalized cost is selected:
+\begin{equation}
+    \mathbf{g}^* = \arg\min_{\mathbf{g} \in \Omega} \mathcal{J}_{\text{penalized}}(\mathbf{g})
+\end{equation}
+
+\subsection{2. Partially Mapped Crossover (PMX)}
+PMX is applied with probability $p_c = 0.85$ between two selected parent chromosomes $\mathbf{g}^A$ and $\mathbf{g}^B$:
+\begin{enumerate}
+    \item Two cut points $c_1$ and $c_2$ are randomly selected such that $1 \le c_1 < c_2 \le N$.
+    \item The middle subsegment between $c_1$ and $c_2$ is exchanged between the parents:
+    \begin{align}
+        \mathbf{g}^{\text{offspring}}[c_1 : c_2] &\gets \mathbf{g}^B[c_1 : c_2]
+    \end{align}
+    \item A position-wise mapping relation $\psi: g^B_j \leftrightarrow g^A_j$ for $j \in [c_1, c_2]$ is constructed.
+    \item For genes outside the window ($k < c_1$ or $k > c_2$), values are transferred from $\mathbf{g}^A$. If a duplicate assignment violates consist coupling limits on trip $k$, the conflict is resolved via recursive lookup: $g^{\text{offspring}}_k \gets \psi(g^A_k)$.
+\end{enumerate}
+
+\subsection{3. Mutation}
+Each gene in an offspring chromosome undergoes mutation independently with per-gene mutation probability $p_m = 0.1$:
+\begin{equation}
+    g_k \gets 
+    \begin{cases}
+        \text{RandomInteger}(0, |U|-1), & \text{with probability } p_m \\
+        g_k, & \text{with probability } 1 - p_m
+    \end{cases}
+\end{equation}
+
+\subsection{4. Elitism and Survivor Replacement}
+The top $\epsilon = 2$ elite individuals possessing the lowest penalized objective values in the current generation are directly copied into the next generation without modification, preventing loss of the best discovered circulation plans.
+
+\section{Algorithmic Structure}
+Algorithm~\ref{alg:ga} outlines the complete evolutionary loop.
+
+\begin{algorithm}[H]
+\caption{Genetic Algorithm for Rolling Stock Scheduling}
+\label{alg:ga}
+\begin{algorithmic}[1]
+\Require Instance data, $N_{\text{pop}} = 80$, $G_{\max} = 300$, $p_c = 0.85$, $p_m = 0.1$, $k_{\text{tourn}} = 5$, $\epsilon = 2$
+\Ensure Best circulation chromosome $\mathbf{g}^*$, Best schedule $\mathcal{S}^*$
+\State Initialize population $\mathcal{P}_0 = \{\mathbf{g}^{(1)}, \dots, \mathbf{g}^{(N_{\text{pop}})}\}$ randomly
+\State Evaluate $\mathcal{J}_{\text{penalized}}(\mathbf{g})$ for all $\mathbf{g} \in \mathcal{P}_0$
+\State Identify global best $\mathbf{g}^* \gets \arg\min_{\mathbf{g} \in \mathcal{P}_0} \mathcal{J}_{\text{penalized}}(\mathbf{g})$
+\For{$g = 1$ \textbf{to} $G_{\max}$}
+    \State $\mathcal{P}_{\text{next}} \gets \text{ExtractElites}(\mathcal{P}_{g-1}, \epsilon)$
+    \While{$|\mathcal{P}_{\text{next}}| < N_{\text{pop}}$}
+        \State Parent $\mathbf{g}^A \gets \text{TournamentSelect}(\mathcal{P}_{g-1}, k_{\text{tourn}})$
+        \State Parent $\mathbf{g}^B \gets \text{TournamentSelect}(\mathcal{P}_{g-1}, k_{\text{tourn}})$
+        \If{$\text{rand}() < p_c$}
+            \State $\mathbf{g}^{\text{off}} \gets \text{PMX\_Crossover}(\mathbf{g}^A, \mathbf{g}^B)$
+        \Else
+            \State $\mathbf{g}^{\text{off}} \gets \mathbf{g}^A$
+        \EndIf
+        \State $\mathbf{g}^{\text{off}} \gets \text{Mutate}(\mathbf{g}^{\text{off}}, p_m)$
+        \State Add $\mathbf{g}^{\text{off}}$ to $\mathcal{P}_{\text{next}}$
+    \EndWhile
+    \State $\mathcal{P}_g \gets \mathcal{P}_{\text{next}}$
+    \State Update global best individual $\mathbf{g}^*$
+    \If{fitness plateau detected across 50 generations}
+        \State \textbf{break}
+    \EndIf
+\EndFor
+\State \Return $\mathbf{g}^*, \mathcal{S}^*$
+\end{algorithmic}
+\end{algorithm}
+
+\section{Holland's Schema Theorem and Epistasis Analysis}
+Holland's Schema Theorem provides fundamental insight into how short, low-order, above-average building blocks (schemata) propagate across generations.
+
+\subsection{The Fundamental Schema Inequality}
+Let $H$ represent a schema (a template over the alphabet $\{0, 1, \dots, |U|-1, *\}$), $\delta(H)$ its defining length, $o(H)$ its order, and $m(H, t)$ the number of individuals containing $H$ at generation $t$. The expected number of instances of $H$ at generation $t+1$ satisfies:
+\begin{equation}
+    \mathbb{E}[m(H, t+1)] \ge m(H, t) \cdot \frac{f(H)}{\bar{f}(t)} \left[ 1 - p_c \frac{\delta(H)}{N-1} - o(H) \cdot p_m \right]
+\end{equation}
+where $f(H)$ is the average fitness of individuals exemplifying schema $H$, and $\bar{f}(t)$ is the population mean fitness.
+
+\subsection{Epistatic Disruption in Rolling Stock Scheduling}
+In rolling stock scheduling, gene interactions are highly non-linear (epistatic):
+\begin{itemize}
+    \item The feasibility of gene $g_j$ depends directly on gene $g_i$ whenever trip $j$ succeeds trip $i$ in a trainset's circulation.
+    \item High defining-length schemata representing full multi-trip circulations ($\delta(H) \approx N$) suffer elevated crossover disruption probabilities ($p_c \frac{\delta(H)}{N-1} \approx 0.85$).
+    \item Consequently, standard genetic recombination can easily tear apart delicately balanced round-trip circulations, explaining why GA requires steep penalty functions and elitist survival to avoid degrading into infeasible solutions.
+\end{itemize}
+
+\end{document}
