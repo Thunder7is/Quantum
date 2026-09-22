@@ -1,25 +1,26 @@
 {
   "initial_breakdown": {
-    "total_deadhead_km": 1741.9,
-    "units_used": 22,
+    "total": 5827.2,
+    "deadhead_km": 1277.2,
+    "units_used": 20,
     "maintenance_violation_km": 0.0,
-    "uncovered_demand_passengers": 0,
-    "timing_violations": 15,
-    "total_cost": 20041.9
+    "uncovered_demand": 775,
+    "timing_violations": 0
   },
   "final_breakdown": {
-    "total_deadhead_km": 1262.1,
+    "total": 4024.4,
+    "deadhead_km": 1042.4,
     "units_used": 19,
     "maintenance_violation_km": 0.0,
-    "uncovered_demand_passengers": 97,
-    "timing_violations": 0,
-    "total_cost": 4306.1
+    "uncovered_demand": 66,
+    "timing_violations": 0
   },
-  "improvement_pct": 78.5,
-  "sa_config": {
+  "improvement_pct": 30.9,
+  "hyperparameters": {
     "initial_temp": 500.0,
     "cooling_rate": 0.995,
     "min_temp": 0.5,
     "iterations_per_temp": 40
-  }
+  },
+  "algorithm": "simulated_annealing"
 }
