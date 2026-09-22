@@ -1,25 +1,25 @@
 n_trips,algorithm,timing_violations,uncovered_demand,total_cost,runtime_sec
 20,Greedy,0,315,3898.3,0.0009
-20,Simulated Annealing,0,123,2849.8,1.2389
-20,Genetic Algorithm,0,483,4035.6,0.0696
-20,NSGA-II,1,315,5383.4,0.1787
+20,Simulated Annealing,0,123,2849.8,1.3021
+20,Genetic Algorithm,0,483,4035.6,0.0703
+20,NSGA-II,1,315,5383.4,0.1825
 40,Greedy,0,756,5537.4,0.0013
-40,Simulated Annealing,0,73,3749.4,2.0342
-40,Genetic Algorithm,0,760,6780.0,0.1194
-40,NSGA-II,3,314,8745.2,0.2659
+40,Simulated Annealing,0,73,3749.4,2.1528
+40,Genetic Algorithm,0,760,6780.0,0.1224
+40,NSGA-II,3,314,8745.2,0.2662
 60,Greedy,0,756,5696.9,0.0014
-60,Simulated Annealing,0,129,4074.1,2.6722
-60,Genetic Algorithm,1,756,8969.1,0.1692
-60,NSGA-II,1,666,8467.9,0.3553
+60,Simulated Annealing,0,129,4074.1,2.7612
+60,Genetic Algorithm,1,756,8969.1,0.1693
+60,NSGA-II,1,666,8467.9,0.3599
 80,Greedy,2,3131,13658.4,0.0017
-80,Simulated Annealing,0,2027,9331.5,3.5037
-80,Genetic Algorithm,19,1239,28912.6,0.2622
-80,NSGA-II,23,885,31724.1,0.492
+80,Simulated Annealing,0,2027,9331.5,3.4255
+80,Genetic Algorithm,19,1239,28912.6,0.2603
+80,NSGA-II,23,885,31724.1,0.4928
 100,Greedy,7,5498,23959.9,0.002
-100,Simulated Annealing,1,4536,15878.3,4.0244
-100,Genetic Algorithm,26,1699,38128.8,0.3562
-100,NSGA-II,32,1699,43330.6,0.6033
-120,Greedy,15,4686,31208.7,0.0025
-120,Simulated Annealing,3,3140,15483.9,4.9501
-120,Genetic Algorithm,36,1835,49698.5,0.4431
-120,NSGA-II,39,1261,50623.1,0.688
+100,Simulated Annealing,1,4536,15878.3,4.1108
+100,Genetic Algorithm,26,1699,38128.8,0.354
+100,NSGA-II,32,1699,43330.6,0.59
+120,Greedy,15,4686,31208.7,0.0024
+120,Simulated Annealing,3,3140,15483.9,4.727
+120,Genetic Algorithm,36,1835,49698.5,0.4354
+120,NSGA-II,39,1261,50623.1,0.6899

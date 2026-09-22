@@ -4,4 +4,4 @@ n_trips,timing_violations,uncovered_demand,runtime_sec
 60,0,756,0.0014
 80,2,3131,0.0017
 100,7,5498,0.002
-120,15,4686,0.0025
+120,15,4686,0.0024

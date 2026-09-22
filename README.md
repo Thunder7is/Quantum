@@ -30,13 +30,13 @@ Rolling stock scheduling and circulation requires assigning physical trainsets t
 
 Benchmark performance across a standardized 60-trip, 24-unit timetable instance:
 
-| Algorithm | Best Cost | Units Used | Timing Violations |
-| :--- | :---: | :---: | :---: |
-| **Greedy** | 5,827.2 | 20 | 0 |
-| **Simulated Annealing** | 4,024.4 | 19 | 0 |
-| **Genetic Algorithm** | 10,203.1 | 24 | 2 |
-| **NSGA-II** | 9,363.9 | 19 | 4 |
-| **Quantum Annealing (QUBO)** | *In Progress* | *TBD* | *TBD* |
+| Algorithm | Best Cost | Deadhead km | Units Used | Uncovered Demand | Timing Violations |
+| :--- | :---: | :---: | :---: | :---: | :---: |
+| **Greedy** | 5,696.9 | 1,184.9 | 20 | 756 | 0 |
+| **Simulated Annealing** | 4,074.1 | 966.1 | 19 | 129 | 0 |
+| **Genetic Algorithm** | 7,910.6 | 2,574.6 | 23 | 943 | 0 |
+| **NSGA-II** | 7,807.1 | 2,205.1 | 24 | 501 | 1 |
+| **Quantum Annealing (QUBO)** | *In Progress* | *TBD* | *TBD* | *TBD* | *TBD* |
 
 > [!NOTE]
 > Detailed metrics, convergence trajectories, and Pareto front trade-offs are logged under `outputs/comparison/master_comparison.csv` and documented in [architecture.md](architecture.md).
@@ -103,6 +103,17 @@ All benchmark schedules, JSON performance summaries, and comparative visualizati
 - **Status**: In Progress
 - **Target Venue**: XXXXXXX conference
 - **Working Title**: *Benchmarking Classical and Quantum Annealing Approaches for Rolling Stock Scheduling Under Complex Coupling and Maintenance Constraints*
+
+---
+
+## Contributors
+
+| Name | Role |
+| :--- | :--- |
+| Sayantan Mandal | Algorithm design, MLOps, project lead |
+| Rishav Pal | Data generation, experimental setup |
+| Asmit Sharma | Mathematical formulation, LaTeX |
+| Ashish Kumar | Visualization, analysis, documentation |
 
 ---
 
