@@ -110,7 +110,7 @@ All benchmark schedules, JSON performance summaries, and comparative visualizati
 
 | Name | Role |
 | :--- | :--- |
-| Sayantan Mandal | Algorithm design, MLOps, project lead |
+| Sayantan Mandal | Algorithm design, MLOps |
 | Rishav Pal | Data generation, experimental setup |
 | Asmit Sharma | Mathematical formulation, LaTeX |
 | Ashish Kumar | Visualization, analysis, documentation |
