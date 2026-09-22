@@ -1,159 +1,149 @@
-# Benchmark execution script running and evaluating all four rolling stock scheduling algorithms
+# Master execution benchmark running all four rolling stock scheduling algorithms
 import os
+import sys
 import time
 import json
 import pandas as pd
-from utils.data_loader import load_instance
-from utils.greedy_init import chains_to_schedule_df
-from utils.viz import plot_comparison_bar, plot_cost_history
-from algorithms.greedy import solve_greedy
-from algorithms.simulated_annealing import solve_simulated_annealing
-from algorithms.genetic_algorithm import solve_genetic_algorithm
-from algorithms.nsga2 import solve_nsga2
+import numpy as np
+import matplotlib
+matplotlib.use("Agg")
+import matplotlib.pyplot as plt
 
-# Root output path for benchmark comparisons
-COMP_DIR = os.path.abspath(os.path.join(os.path.dirname(__file__), "..", "outputs", "comparison"))
-BASE_OUT = os.path.abspath(os.path.join(os.path.dirname(__file__), "..", "outputs"))
+# Support execution as direct script or package module
+try:
+    from .algorithms.greedy import main as run_greedy
+    from .algorithms.simulated_annealing import main as run_sa
+    from .algorithms.genetic_algorithm import main as run_ga
+    from .algorithms.nsga2 import main as run_nsga2
+except (ImportError, ValueError):
+    sys.path.insert(0, os.path.abspath(os.path.join(os.path.dirname(__file__), "..")))
+    from src.algorithms.greedy import main as run_greedy
+    from src.algorithms.simulated_annealing import main as run_sa
+    from src.algorithms.genetic_algorithm import main as run_ga
+    from src.algorithms.nsga2 import main as run_nsga2
 
-# Run all algorithms, benchmark performance, and persist comparative statistics
-def run_benchmark():
+# Base directories for inputs and comparison outputs
+BASE_DIR = os.path.abspath(os.path.join(os.path.dirname(__file__), ".."))
+OUTPUTS_DIR = os.path.join(BASE_DIR, "outputs")
+COMP_DIR = os.path.join(OUTPUTS_DIR, "comparison")
+
+# Execute all four solvers in sequence, record timings, and compile comparative reports
+def main():
     os.makedirs(COMP_DIR, exist_ok=True)
-    inst = load_instance()
-    fleet, trips, dist_lookup, maint_lookup = inst["fleet"], inst["trips"], inst["dist_lookup"], inst["maint_lookup"]
-    stations = inst["stations"]
+    runtimes = {}
 
     print("=================================================================")
-    print("  Rolling Stock Scheduling Benchmark (4 Algorithms)")
-    print(f"  Fleet: {len(fleet)} units | Trips: {len(trips)} | Stations: {len(stations)}")
+    print("  Master Rolling Stock Benchmark: Running All 4 Solvers")
     print("=================================================================\n")
 
-    results = {}
-    comparison_rows = []
-
-    # 1. Pure Greedy Heuristic
-    print("[1/4] Running Pure Greedy...")
+    # Step 1: Run each algorithm in sequence and record individual execution runtimes
+    print("[1/4] Executing Pure Greedy Baseline...")
     t0 = time.time()
-    g_chains, g_cost, g_breakdown = solve_greedy(fleet, trips, dist_lookup, maint_lookup)
-    g_time = time.time() - t0
-    results["Greedy"] = {"total_cost": g_cost, "breakdown": g_breakdown, "runtime_sec": round(g_time, 2)}
-    comparison_rows.append({
-        "Algorithm": "Greedy",
-        "Total Cost": g_cost,
-        "Deadhead (km)": g_breakdown.get("deadhead_km", g_breakdown.get("total_deadhead_km")),
-        "Units Used": g_breakdown["units_used"],
-        "Maint Violations (km)": g_breakdown["maintenance_violation_km"],
-        "Uncovered Demand": g_breakdown.get("uncovered_demand", g_breakdown.get("uncovered_demand_passengers")),
-        "Timing Violations": g_breakdown["timing_violations"],
-        "Runtime (s)": round(g_time, 2),
-    })
-    # Persist greedy schedule
-    g_dir = os.path.join(BASE_OUT, "greedy")
-    os.makedirs(g_dir, exist_ok=True)
-    chains_to_schedule_df(g_chains, trips).to_csv(os.path.join(g_dir, "final_schedule.csv"), index=False)
-    with open(os.path.join(g_dir, "run_summary.json"), "w") as f:
-        json.dump(results["Greedy"], f, indent=2)
+    run_greedy()
+    runtimes["Greedy"] = round(time.time() - t0, 2)
 
-    # 2. Simulated Annealing
-    print("[2/4] Running Simulated Annealing...")
+    print("\n[2/4] Executing Simulated Annealing Solver...")
     t0 = time.time()
-    sa_chains, sa_cost, sa_breakdown, sa_history = solve_simulated_annealing(
-        fleet, trips, dist_lookup, maint_lookup, init_chains=g_chains
-    )
-    sa_time = time.time() - t0
-    results["Simulated Annealing"] = {"total_cost": sa_cost, "breakdown": sa_breakdown, "runtime_sec": round(sa_time, 2)}
-    comparison_rows.append({
-        "Algorithm": "Simulated Annealing",
-        "Total Cost": sa_cost,
-        "Deadhead (km)": sa_breakdown.get("deadhead_km", sa_breakdown.get("total_deadhead_km")),
-        "Units Used": sa_breakdown["units_used"],
-        "Maint Violations (km)": sa_breakdown["maintenance_violation_km"],
-        "Uncovered Demand": sa_breakdown.get("uncovered_demand", sa_breakdown.get("uncovered_demand_passengers")),
-        "Timing Violations": sa_breakdown["timing_violations"],
-        "Runtime (s)": round(sa_time, 2),
-    })
-    # Persist SA results
-    sa_dir = os.path.join(BASE_OUT, "sa")
-    os.makedirs(sa_dir, exist_ok=True)
-    chains_to_schedule_df(sa_chains, trips).to_csv(os.path.join(sa_dir, "final_schedule.csv"), index=False)
-    pd.DataFrame(sa_history).to_csv(os.path.join(sa_dir, "sa_cost_history.csv"), index=False)
-    plot_cost_history(sa_history, save_path=os.path.join(sa_dir, "sa_convergence.png"), title="Simulated Annealing Convergence")
-    with open(os.path.join(sa_dir, "run_summary.json"), "w") as f:
-        json.dump(results["Simulated Annealing"], f, indent=2)
+    run_sa()
+    runtimes["Simulated Annealing"] = round(time.time() - t0, 2)
 
-    # 3. Genetic Algorithm
-    print("[3/4] Running Genetic Algorithm...")
+    print("\n[3/4] Executing Genetic Algorithm Solver...")
     t0 = time.time()
-    ga_res = solve_genetic_algorithm(fleet, trips, dist_lookup, maint_lookup)
-    ga_chains, ga_cost, ga_breakdown, ga_history = ga_res[0], ga_res[1], ga_res[2], ga_res[3]
-    ga_time = time.time() - t0
-    results["Genetic Algorithm"] = {"total_cost": ga_cost, "breakdown": ga_breakdown, "runtime_sec": round(ga_time, 2)}
-    comparison_rows.append({
-        "Algorithm": "Genetic Algorithm",
-        "Total Cost": ga_cost,
-        "Deadhead (km)": ga_breakdown.get("deadhead_km", ga_breakdown.get("total_deadhead_km")),
-        "Units Used": ga_breakdown["units_used"],
-        "Maint Violations (km)": ga_breakdown["maintenance_violation_km"],
-        "Uncovered Demand": ga_breakdown.get("uncovered_demand", ga_breakdown.get("uncovered_demand_passengers")),
-        "Timing Violations": ga_breakdown["timing_violations"],
-        "Runtime (s)": round(ga_time, 2),
-    })
-    # Persist GA results
-    ga_dir = os.path.join(BASE_OUT, "ga")
-    os.makedirs(ga_dir, exist_ok=True)
-    chains_to_schedule_df(ga_chains, trips).to_csv(os.path.join(ga_dir, "final_schedule.csv"), index=False)
-    pd.DataFrame(ga_history).to_csv(os.path.join(ga_dir, "ga_cost_history.csv"), index=False)
-    plot_cost_history(ga_history, save_path=os.path.join(ga_dir, "ga_convergence.png"), title="Genetic Algorithm Convergence")
-    with open(os.path.join(ga_dir, "run_summary.json"), "w") as f:
-        json.dump(results["Genetic Algorithm"], f, indent=2)
+    run_ga()
+    runtimes["Genetic Algorithm"] = round(time.time() - t0, 2)
 
-    # 4. NSGA-II
-    print("[4/4] Running NSGA-II...")
+    print("\n[4/4] Executing NSGA-II Multi-Objective Solver...")
     t0 = time.time()
-    ns_chains, ns_cost, ns_breakdown, ns_pareto, ns_history = solve_nsga2(
-        fleet, trips, dist_lookup, maint_lookup
-    )
-    ns_time = time.time() - t0
-    results["NSGA-II"] = {"total_cost": ns_cost, "breakdown": ns_breakdown, "runtime_sec": round(ns_time, 2)}
-    comparison_rows.append({
-        "Algorithm": "NSGA-II",
-        "Total Cost": ns_cost,
-        "Deadhead (km)": ns_breakdown.get("deadhead_km", ns_breakdown.get("total_deadhead_km")),
-        "Units Used": ns_breakdown["units_used"],
-        "Maint Violations (km)": ns_breakdown["maintenance_violation_km"],
-        "Uncovered Demand": ns_breakdown.get("uncovered_demand", ns_breakdown.get("uncovered_demand_passengers")),
-        "Timing Violations": ns_breakdown["timing_violations"],
-        "Runtime (s)": round(ns_time, 2),
-    })
-    # Persist NSGA-II results
-    ns_dir = os.path.join(BASE_OUT, "nsga2")
-    os.makedirs(ns_dir, exist_ok=True)
-    chains_to_schedule_df(ns_chains, trips).to_csv(os.path.join(ns_dir, "final_schedule.csv"), index=False)
-    pd.DataFrame(ns_pareto).to_csv(os.path.join(ns_dir, "pareto_front.csv"), index=False)
-    pd.DataFrame(ns_history).to_csv(os.path.join(ns_dir, "nsga2_cost_history.csv"), index=False)
-    plot_cost_history(ns_history, save_path=os.path.join(ns_dir, "nsga2_convergence.png"), title="NSGA-II Convergence")
-    with open(os.path.join(ns_dir, "run_summary.json"), "w") as f:
-        json.dump(results["NSGA-II"], f, indent=2)
+    run_nsga2()
+    runtimes["NSGA-II"] = round(time.time() - t0, 2)
 
-    # Create comparison summary table
-    comp_df = pd.DataFrame(comparison_rows)
-    csv_path = os.path.join(COMP_DIR, "algorithm_comparison.csv")
-    comp_df.to_csv(csv_path, index=False)
+    # Step 2: Load run_summary.json artifacts from each algorithm output folder
+    with open(os.path.join(OUTPUTS_DIR, "greedy", "run_summary.json"), "r") as f:
+        greedy_sum = json.load(f)
 
-    json_path = os.path.join(COMP_DIR, "algorithm_comparison.json")
-    with open(json_path, "w") as f:
-        json.dump(results, f, indent=2)
+    with open(os.path.join(OUTPUTS_DIR, "sa", "run_summary.json"), "r") as f:
+        sa_sum = json.load(f)
 
-    bar_path = os.path.join(COMP_DIR, "comparison_bar.png")
-    plot_comparison_bar(results, save_path=bar_path, title="Rolling Stock Solvers: Total Cost Comparison")
+    with open(os.path.join(OUTPUTS_DIR, "ga", "run_summary.json"), "r") as f:
+        ga_sum = json.load(f)
+
+    with open(os.path.join(OUTPUTS_DIR, "nsga2", "run_summary.json"), "r") as f:
+        nsga2_sum = json.load(f)
+
+    # Extract standardized metric breakdowns
+    breakdowns = {
+        "Greedy": greedy_sum["breakdown"],
+        "Simulated Annealing": sa_sum.get("final_breakdown", sa_sum.get("breakdown")),
+        "Genetic Algorithm": ga_sum["breakdown"],
+        "NSGA-II": nsga2_sum.get("best_compromise_breakdown", nsga2_sum.get("breakdown")),
+    }
+
+    # Step 3: Build master comparison records
+    rows = []
+    for algo, bd in breakdowns.items():
+        rows.append({
+            "algorithm": algo,
+            "total_cost": round(float(bd.get("total", bd.get("total_cost", 0.0))), 1),
+            "deadhead_km": round(float(bd.get("deadhead_km", bd.get("total_deadhead_km", 0.0))), 1),
+            "units_used": int(bd.get("units_used", 0)),
+            "maintenance_violation_km": round(float(bd.get("maintenance_violation_km", 0.0))),
+            "uncovered_demand": int(bd.get("uncovered_demand", bd.get("uncovered_demand_passengers", 0))),
+            "timing_violations": int(bd.get("timing_violations", 0)),
+            "runtime_sec": runtimes[algo],
+        })
+
+    # Save outputs/comparison/master_comparison.csv
+    df_comparison = pd.DataFrame(rows)
+    csv_path = os.path.join(COMP_DIR, "master_comparison.csv")
+    df_comparison.to_csv(csv_path, index=False)
+    print(f"\nSaved CSV: {csv_path}")
+
+    # Step 4: Generate 4-panel figure master_comparison.png
+    fig, axes = plt.subplots(2, 2, figsize=(13, 9.5))
+    metrics_info = [
+        ("total_cost", "Total Objective Cost (lower = better)", axes[0, 0]),
+        ("deadhead_km", "Deadhead Transit (km)", axes[0, 1]),
+        ("units_used", "Activated Fleet Units (count)", axes[1, 0]),
+        ("uncovered_demand", "Uncovered Passenger Demand", axes[1, 1]),
+    ]
+
+    # Prescribed color palette: red for Greedy, orange for SA, green for GA, blue for NSGA-II
+    colors = ["#d62728", "#ff7f0e", "#2ca02c", "#1f77b4"]
+    algos = df_comparison["algorithm"].tolist()
+
+    for metric_col, title, ax in metrics_info:
+        vals = df_comparison[metric_col].tolist()
+        bars = ax.bar(algos, vals, color=colors, width=0.55, edgecolor="#222222", linewidth=1.0)
+        # Annotate bar values
+        for bar in bars:
+            h = bar.get_height()
+            ax.annotate(f"{h:.1f}" if isinstance(h, float) else f"{h}",
+                        xy=(bar.get_x() + bar.get_width() / 2, h),
+                        xytext=(0, 4),
+                        textcoords="offset points",
+                        ha="center", va="bottom", fontsize=9.5, fontweight="bold")
+        ax.set_title(title, fontsize=11.5, fontweight="bold")
+        ax.grid(axis="y", linestyle="--", alpha=0.6)
+        ax.tick_params(axis="x", rotation=15, labelsize=9.5)
+
+    plt.suptitle("Master Benchmark: Rolling Stock Scheduling Algorithm Comparison", fontsize=14, fontweight="bold", y=0.98)
+    plt.tight_layout()
+
+    img_path = os.path.join(COMP_DIR, "master_comparison.png")
+    plt.savefig(img_path, dpi=300)
+    plt.close(fig)
+    print(f"Saved figure: {img_path}")
+
+    # Step 5: Print ranked summary table to stdout (ranked by total_cost ascending)
+    df_ranked = df_comparison.sort_values("total_cost").reset_index(drop=True)
+    df_ranked.insert(0, "rank", range(1, len(df_ranked) + 1))
 
     print("\n=================================================================")
-    print("  Benchmark Summary Results:")
+    print("  Ranked Algorithm Performance Summary (Ranked by Total Cost)")
     print("=================================================================")
-    print(comp_df.to_string(index=False))
-    print(f"\nSaved CSV: {csv_path}")
-    print(f"Saved JSON: {json_path}")
-    print(f"Saved Chart: {bar_path}\n")
+    print(df_ranked.to_string(index=False))
+    print("=================================================================\n")
 
-# Main execution entrypoint
+# Standalone execution entrypoint
 if __name__ == "__main__":
-    run_benchmark()
+    main()
