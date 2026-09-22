@@ -1,0 +1,12 @@
+{
+  "timing_violations": [],
+  "uncovered_trips": [],
+  "overloaded_trips": [
+    "T004",
+    "T012",
+    "T026",
+    "T029",
+    "T048",
+    "T050"
+  ]
+}
