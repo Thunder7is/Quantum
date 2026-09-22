@@ -243,7 +243,8 @@ def solve_nsga2(fleet, trips, dist_lookup, maint_lookup,
 # Standalone execution entrypoint
 if __name__ == "__main__":
     os.makedirs(OUT_DIR, exist_ok=True)
-    stations, dist_lookup, fleet, trips, maint_lookup, meta = load_instance()
+    inst = load_instance()
+    fleet, trips, dist_lookup, maint_lookup = inst["fleet"], inst["trips"], inst["dist_lookup"], inst["maint_lookup"]
 
     # Run NSGA-II solver
     best_chains, best_cost, best_breakdown, pareto_points, history = solve_nsga2(

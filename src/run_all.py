@@ -18,7 +18,9 @@ BASE_OUT = os.path.abspath(os.path.join(os.path.dirname(__file__), "..", "output
 # Run all algorithms, benchmark performance, and persist comparative statistics
 def run_benchmark():
     os.makedirs(COMP_DIR, exist_ok=True)
-    stations, dist_lookup, fleet, trips, maint_lookup, meta = load_instance()
+    inst = load_instance()
+    fleet, trips, dist_lookup, maint_lookup = inst["fleet"], inst["trips"], inst["dist_lookup"], inst["maint_lookup"]
+    stations = inst["stations"]
 
     print("=================================================================")
     print("  Rolling Stock Scheduling Benchmark (4 Algorithms)")

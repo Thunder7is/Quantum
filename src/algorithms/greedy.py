@@ -22,8 +22,9 @@ def solve_greedy(fleet, trips, dist_lookup, maint_lookup):
 # Standalone execution entrypoint
 if __name__ == "__main__":
     os.makedirs(OUT_DIR, exist_ok=True)
-    stations, dist_lookup, fleet, trips, maint_lookup, meta = load_instance()
-    print(f"Loaded instance: {len(fleet)} units, {len(trips)} trips, {len(stations)} stations")
+    inst = load_instance()
+    fleet, trips, dist_lookup, maint_lookup = inst["fleet"], inst["trips"], inst["dist_lookup"], inst["maint_lookup"]
+    print(f"Loaded instance: {len(fleet)} units, {len(trips)} trips, {len(inst['stations'])} stations")
 
     # Run greedy solver
     chains, cost, breakdown = solve_greedy(fleet, trips, dist_lookup, maint_lookup)

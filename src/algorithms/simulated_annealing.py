@@ -133,7 +133,8 @@ def solve_simulated_annealing(fleet, trips, dist_lookup, maint_lookup, init_chai
 # Standalone execution entrypoint
 if __name__ == "__main__":
     os.makedirs(OUT_DIR, exist_ok=True)
-    stations, dist_lookup, fleet, trips, maint_lookup, meta = load_instance()
+    inst = load_instance()
+    fleet, trips, dist_lookup, maint_lookup = inst["fleet"], inst["trips"], inst["dist_lookup"], inst["maint_lookup"]
     fleet_lookup, trips_lookup = get_lookups(fleet, trips)
 
     # Initial greedy baseline evaluation
