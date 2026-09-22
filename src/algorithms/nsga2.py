@@ -25,11 +25,12 @@ def copy_chains(chains):
 
 # Evaluate two distinct objective vectors for multi-objective optimization
 def evaluate_objectives(chains, fleet_lookup, trips_lookup, dist_lookup, maint_lookup):
-    cost, bd = compute_cost(chains, fleet_lookup, trips_lookup, dist_lookup, maint_lookup)
+    bd = compute_cost(chains, trips_lookup, fleet_lookup, dist_lookup, maint_lookup)
+    cost = bd["total"]
     # Objective 1: Operational resource consumption (deadhead km + unit activation penalty)
-    f1 = bd["total_deadhead_km"] + 150.0 * bd["units_used"]
+    f1 = bd["deadhead_km"] + 150.0 * bd["units_used"]
     # Objective 2: Service quality and reliability penalty (uncovered demand + maintenance + timing)
-    f2 = (bd["uncovered_demand_passengers"] * 2.0
+    f2 = (bd["uncovered_demand"] * 2.0
           + bd["maintenance_violation_km"] * 5.0
           + bd["timing_violations"] * 1000.0)
     return (f1, f2), cost, bd

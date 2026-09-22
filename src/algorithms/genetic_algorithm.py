@@ -107,8 +107,8 @@ def solve_genetic_algorithm(fleet, trips, dist_lookup, maint_lookup,
     # Evaluate initial population
     pop_evaluated = []
     for ind in population:
-        c, b = compute_cost(ind, fleet_lookup, trips_lookup, dist_lookup, maint_lookup)
-        pop_evaluated.append((ind, c, b))
+        b = compute_cost(ind, trips_lookup, fleet_lookup, dist_lookup, maint_lookup)
+        pop_evaluated.append((ind, b["total"], b))
 
     pop_evaluated.sort(key=lambda x: x[1])
     best_chains = copy_chains(pop_evaluated[0][0])
@@ -138,8 +138,8 @@ def solve_genetic_algorithm(fleet, trips, dist_lookup, maint_lookup,
         # Evaluate offspring generation
         pop_evaluated = []
         for ind in new_pop:
-            c, b = compute_cost(ind, fleet_lookup, trips_lookup, dist_lookup, maint_lookup)
-            pop_evaluated.append((ind, c, b))
+            b = compute_cost(ind, trips_lookup, fleet_lookup, dist_lookup, maint_lookup)
+            pop_evaluated.append((ind, b["total"], b))
 
         pop_evaluated.sort(key=lambda x: x[1])
         if pop_evaluated[0][1] < best_cost:

@@ -1,40 +1,57 @@
-# Feasibility validation routines for transitions and trip chains
+# Spatial and temporal feasibility evaluation routines
+import pandas as pd
 from .data_loader import travel
 
-# Check if trip B can feasibly follow trip A on the same rolling stock unit
-def is_feasible_arc(trip_a, trip_b, dist_lookup):
-    # Retrieve travel time required to reposition from destination of A to origin of B
-    travel_time, _ = travel(dist_lookup, trip_a["destination_station"], trip_b["origin_station"])
-    # Earliest possible arrival at origin of trip B
-    earliest_arrival = trip_a["arrival_min"] + trip_a["min_turnaround_min"] + travel_time
-    # Arc is feasible if arrival occurs before or at departure time of B
-    return earliest_arrival <= trip_b["departure_min"]
+# Extract field attribute or dict key uniformly
+def _get(row, key, default=None):
+    if isinstance(row, dict):
+        return row.get(key, default)
+    return getattr(row, key, default)
 
-# Check if an entire sequence of trips assigned to a unit is physically feasible
-def is_feasible_chain(chain, unit_info, trips_lookup, dist_lookup, maint_lookup=None, check_maint=False):
-    # Empty chain is always valid
-    if not chain:
-        return True, "valid_empty"
+# Check if unit can travel from trip_a destination to trip_b origin in time including turnaround
+def is_feasible_arc(unit_row, trip_a_row, trip_b_row, dist_lookup) -> bool:
+    dest_a = _get(trip_a_row, "destination_station")
+    orig_b = _get(trip_b_row, "origin_station")
+    arr_a = _get(trip_a_row, "arrival_min")
+    turnaround_a = _get(trip_a_row, "min_turnaround_min")
+    dep_b = _get(trip_b_row, "departure_min")
+
+    # Repositioning travel runtime
+    travel_time, _ = travel(dist_lookup, dest_a, orig_b)
+    earliest_arrival = arr_a + turnaround_a + travel_time
+
+    # Valid if repositioning finishes prior to scheduled departure
+    return bool(earliest_arrival <= dep_b)
+
+# Check if an ordered or unordered list of trips assigned to a unit is physically feasible
+def is_feasible_chain(unit_row, trip_ids: list, trips_df, dist_lookup) -> bool:
+    # Empty trip assignment is trivially feasible
+    if not trip_ids:
+        return True
+
+    # Convert trips DataFrame into lookup map if needed
+    if isinstance(trips_df, pd.DataFrame):
+        trips_lookup = {r.trip_id: r._asdict() for r in trips_df.itertuples(index=False)}
+    else:
+        trips_lookup = trips_df
+
     # Sort trips chronologically by departure minute
-    chain_sorted = sorted(chain, key=lambda tid: trips_lookup[tid]["departure_min"])
-    location = unit_info["home_depot"]
-    avail_time = unit_info["available_from_min"]
-    km_since_maint = unit_info.get("km_since_maintenance", 0.0)
-    max_km = maint_lookup[unit_info["unit_type"]] if maint_lookup else float("inf")
+    sorted_trips = sorted([trips_lookup[tid] for tid in trip_ids], key=lambda t: t["departure_min"])
 
-    # Verify initial repositioning and consecutive trip transitions
-    for tid in chain_sorted:
-        trip = trips_lookup[tid]
-        travel_time, deadhead_km = travel(dist_lookup, location, trip["origin_station"])
-        # Check if unit can reach trip origin in time
-        if avail_time + travel_time > trip["departure_min"]:
-            return False, f"timing_violation_at_{tid}"
-        # Track cumulative mileage if maintenance check requested
-        km_since_maint += deadhead_km + trip["distance_km"]
-        if check_maint and km_since_maint > max_km:
-            return False, f"maintenance_exceeded_at_{tid}"
-        # Update current location and next available timestamp
-        location = trip["destination_station"]
-        avail_time = trip["arrival_min"] + trip["min_turnaround_min"]
+    # Initial unit depot positioning check
+    location = _get(unit_row, "home_depot")
+    avail_time = _get(unit_row, "available_from_min")
 
-    return True, "feasible"
+    first_trip = sorted_trips[0]
+    tt, _ = travel(dist_lookup, location, first_trip["origin_station"])
+    if avail_time + tt > first_trip["departure_min"]:
+        return False
+
+    # Check each consecutive transition using is_feasible_arc
+    for idx in range(len(sorted_trips) - 1):
+        trip_a = sorted_trips[idx]
+        trip_b = sorted_trips[idx + 1]
+        if not is_feasible_arc(unit_row, trip_a, trip_b, dist_lookup):
+            return False
+
+    return True

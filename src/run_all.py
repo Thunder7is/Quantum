@@ -39,10 +39,10 @@ def run_benchmark():
     comparison_rows.append({
         "Algorithm": "Greedy",
         "Total Cost": g_cost,
-        "Deadhead (km)": g_breakdown["total_deadhead_km"],
+        "Deadhead (km)": g_breakdown.get("deadhead_km", g_breakdown.get("total_deadhead_km")),
         "Units Used": g_breakdown["units_used"],
         "Maint Violations (km)": g_breakdown["maintenance_violation_km"],
-        "Uncovered Demand": g_breakdown["uncovered_demand_passengers"],
+        "Uncovered Demand": g_breakdown.get("uncovered_demand", g_breakdown.get("uncovered_demand_passengers")),
         "Timing Violations": g_breakdown["timing_violations"],
         "Runtime (s)": round(g_time, 2),
     })
@@ -64,10 +64,10 @@ def run_benchmark():
     comparison_rows.append({
         "Algorithm": "Simulated Annealing",
         "Total Cost": sa_cost,
-        "Deadhead (km)": sa_breakdown["total_deadhead_km"],
+        "Deadhead (km)": sa_breakdown.get("deadhead_km", sa_breakdown.get("total_deadhead_km")),
         "Units Used": sa_breakdown["units_used"],
         "Maint Violations (km)": sa_breakdown["maintenance_violation_km"],
-        "Uncovered Demand": sa_breakdown["uncovered_demand_passengers"],
+        "Uncovered Demand": sa_breakdown.get("uncovered_demand", sa_breakdown.get("uncovered_demand_passengers")),
         "Timing Violations": sa_breakdown["timing_violations"],
         "Runtime (s)": round(sa_time, 2),
     })
@@ -91,10 +91,10 @@ def run_benchmark():
     comparison_rows.append({
         "Algorithm": "Genetic Algorithm",
         "Total Cost": ga_cost,
-        "Deadhead (km)": ga_breakdown["total_deadhead_km"],
+        "Deadhead (km)": ga_breakdown.get("deadhead_km", ga_breakdown.get("total_deadhead_km")),
         "Units Used": ga_breakdown["units_used"],
         "Maint Violations (km)": ga_breakdown["maintenance_violation_km"],
-        "Uncovered Demand": ga_breakdown["uncovered_demand_passengers"],
+        "Uncovered Demand": ga_breakdown.get("uncovered_demand", ga_breakdown.get("uncovered_demand_passengers")),
         "Timing Violations": ga_breakdown["timing_violations"],
         "Runtime (s)": round(ga_time, 2),
     })
@@ -118,10 +118,10 @@ def run_benchmark():
     comparison_rows.append({
         "Algorithm": "NSGA-II",
         "Total Cost": ns_cost,
-        "Deadhead (km)": ns_breakdown["total_deadhead_km"],
+        "Deadhead (km)": ns_breakdown.get("deadhead_km", ns_breakdown.get("total_deadhead_km")),
         "Units Used": ns_breakdown["units_used"],
         "Maint Violations (km)": ns_breakdown["maintenance_violation_km"],
-        "Uncovered Demand": ns_breakdown["uncovered_demand_passengers"],
+        "Uncovered Demand": ns_breakdown.get("uncovered_demand", ns_breakdown.get("uncovered_demand_passengers")),
         "Timing Violations": ns_breakdown["timing_violations"],
         "Runtime (s)": round(ns_time, 2),
     })

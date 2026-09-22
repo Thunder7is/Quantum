@@ -16,7 +16,8 @@ def solve_greedy(fleet, trips, dist_lookup, maint_lookup):
     # Construct circulation chains greedily
     chains, trip_assignment = greedy_construction(fleet, trips, dist_lookup)
     # Evaluate full cost breakdown
-    cost, breakdown = compute_cost(chains, fleet_lookup, trips_lookup, dist_lookup, maint_lookup)
+    breakdown = compute_cost(chains, trips, fleet, dist_lookup, maint_lookup)
+    cost = breakdown["total"]
     return chains, cost, breakdown
 
 # Standalone execution entrypoint

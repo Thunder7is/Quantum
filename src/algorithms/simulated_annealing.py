@@ -83,7 +83,8 @@ def solve_simulated_annealing(fleet, trips, dist_lookup, maint_lookup, init_chai
         init_chains, _ = greedy_construction(fleet, trips, dist_lookup)
 
     current = copy_chains(init_chains)
-    current_cost, current_breakdown = compute_cost(current, fleet_lookup, trips_lookup, dist_lookup, maint_lookup)
+    current_breakdown = compute_cost(current, trips_lookup, fleet_lookup, dist_lookup, maint_lookup)
+    current_cost = current_breakdown["total"]
 
     best = copy_chains(current)
     best_cost = current_cost
@@ -105,7 +106,8 @@ def solve_simulated_annealing(fleet, trips, dist_lookup, maint_lookup, init_chai
             else:
                 candidate = move_couple_decouple(current, all_unit_ids, all_trip_ids, rng)
 
-            cand_cost, cand_breakdown = compute_cost(candidate, fleet_lookup, trips_lookup, dist_lookup, maint_lookup)
+            cand_breakdown = compute_cost(candidate, trips_lookup, fleet_lookup, dist_lookup, maint_lookup)
+            cand_cost = cand_breakdown["total"]
             delta = cand_cost - current_cost
 
             # Metropolis acceptance criterion
@@ -139,7 +141,8 @@ if __name__ == "__main__":
 
     # Initial greedy baseline evaluation
     init_chains, _ = greedy_construction(fleet, trips, dist_lookup)
-    init_cost, init_breakdown = compute_cost(init_chains, fleet_lookup, trips_lookup, dist_lookup, maint_lookup)
+    init_breakdown = compute_cost(init_chains, trips_lookup, fleet_lookup, dist_lookup, maint_lookup)
+    init_cost = init_breakdown["total"]
     print("Initial (greedy) solution cost breakdown:")
     print(json.dumps(init_breakdown, indent=2))
 
