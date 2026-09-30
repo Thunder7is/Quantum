@@ -107,10 +107,47 @@ def main():
     schedule_path = os.path.join(OUT_DIR, "final_schedule.csv")
     schedule_df.to_csv(schedule_path, index=False)
 
-    # Save cost history PNG as a single point flat line
-    history = [{"step": 0, "total_cost": cost, "best_cost": cost}]
+    import matplotlib.pyplot as plt
+    import matplotlib.patches as mpatches
+
+    # Build flat line across 60 steps to represent single-pass no-improvement
+    steps = list(range(61))
+    costs = [cost] * 61
+
+    fig, ax = plt.subplots(figsize=(10, 5))
+    ax.plot(steps, costs, color="#e74c3c", linewidth=2.5, linestyle="--",
+            label=f"Greedy Cost: {cost:.1f} (no improvement)")
+
+    # Annotate the flat line with the cost value
+    ax.annotate(
+        f"  Single-pass cost: {cost:.1f}",
+        xy=(30, cost),
+        fontsize=11,
+        color="#e74c3c",
+        va="bottom"
+    )
+
+    # Add text box explaining why it is flat
+    ax.text(0.98, 0.05,
+            "Greedy makes no iterative improvements.\nCost is fixed after one forward pass.",
+            transform=ax.transAxes,
+            fontsize=9,
+            ha="right",
+            va="bottom",
+            bbox=dict(boxstyle="round,pad=0.4", facecolor="#ffeaea", alpha=0.8))
+
+    ax.set_title("Greedy Baseline — Cost Convergence History", fontsize=13, fontweight="bold")
+    ax.set_xlabel("Trip Assignment Step")
+    ax.set_ylabel("Total Cost")
+    ax.set_xlim(0, 60)
+    ax.set_ylim(cost * 0.85, cost * 1.15)
+    ax.grid(True, linestyle="--", alpha=0.5)
+    ax.legend(loc="upper right")
+    plt.tight_layout()
+
     plot_path = os.path.join(OUT_DIR, "cost_history.png")
-    plot_cost_history(history, "Greedy Baseline", plot_path)
+    plt.savefig(plot_path, dpi=150)
+    plt.close()
 
     # Save run summary JSON
     summary_path = os.path.join(OUT_DIR, "run_summary.json")
