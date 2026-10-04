@@ -1,0 +1,69 @@
+\documentclass{article}
+\usepackage{amsmath, booktabs, geometry}
+\geometry{margin=2.5cm}
+\title{NSGA-II -- Mathematical Formulation}
+\author{Gati Shakti Vishwavidyalaya}
+\date{}
+\begin{document}
+\maketitle
+
+\section{What NSGA-II Does}
+NSGA-II optimizes three objectives simultaneously, producing a Pareto front
+of 60 non-dominated solutions representing different operational trade-offs.
+\textit{Code: src/algorithms/nsga2.py, function solve\_nsga2()}
+
+\section{Three Objectives (all minimize)}
+\[
+  f_1 = D_{head} \quad \text{(deadhead km)}
+\]
+\[
+  f_2 = N_{units} \quad \text{(units used)}
+\]
+\[
+  f_3 = P_{uncov} + 100 \cdot V_{time} \quad \text{(demand + timing penalty)}
+\]
+\textit{Computed in: evaluate\_chromosome() in nsga2.py}
+
+\section{Domination Rule}
+Solution $A$ dominates $B$ if:
+\[
+  f_i(A) \leq f_i(B) \; \forall i \in \{1,2,3\} \quad \text{and} \quad f_j(A) < f_j(B) \; \text{for some } j
+\]
+\textit{Code: dominates() function in nsga2.py}
+
+\section{Pareto Rank Assignment}
+Rank 0 = solutions no one dominates (Pareto front). \\
+Rank 1 = dominated only by Rank 0 solutions. And so on.
+\textit{Code: fast\_non\_dominated\_sort() in nsga2.py}
+
+\section{Crowding Distance}
+For solutions at the same rank, prefer those in less crowded regions:
+\[
+  cd_i = \sum_{k=1}^{3} \frac{f_k(i+1) - f_k(i-1)}{f_k^{max} - f_k^{min}}
+\]
+Higher crowding distance = more unique trade-off = preferred in selection.
+\textit{Code: compute\_crowding\_distance() in nsga2.py}
+
+\section{Selection}
+Binary tournament: compare two solutions on (rank, crowding distance).
+Lower rank wins. Ties broken by higher crowding distance.
+\textit{Code: binary\_tournament() in nsga2.py}
+
+\section{Crossover and Mutation}
+SBX crossover ($\eta=15$, $p=0.9$): smooth blend of parent gene values.
+Polynomial mutation ($\eta=20$, $p=1/T$): perturb individual genes.
+After both: call repair\_chromosome() from src/utils/feasibility.py.
+\textit{Code: sbx\_crossover(), polynomial\_mutation() in nsga2.py}
+
+\section{Generation Loop}
+Parents (60) + children (60) = 120 combined. \\
+Sort all 120 by rank then crowding distance. \\
+Keep best 60 for next generation.
+\textit{Code: generation loop in solve\_nsga2()}
+
+\section{Why NSGA-II Has Scaling Issues}
+Splitting 60 individuals across 3 objectives means no single objective
+gets full optimization pressure. At 120 trips: 39 timing violations.
+The 3-objective pressure sacrifices constraint satisfaction at scale.
+
+\end{document}
