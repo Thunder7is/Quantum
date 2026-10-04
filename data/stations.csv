@@ -1,9 +1,6 @@
 station_id,is_depot,has_maintenance_facility,platform_capacity
-S1,True,True,2
-S2,False,False,2
-S3,False,False,4
-S4,False,False,5
-S5,False,False,4
-S6,True,False,5
-S7,False,False,4
-S8,True,True,5
+Cologne,True,False,2
+Munich,True,False,5
+Berlin,False,False,4
+Frankfurt,False,False,3
+Hamburg,True,True,3

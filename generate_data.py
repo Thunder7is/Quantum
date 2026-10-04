@@ -1,9 +1,29 @@
 # Synthetic data generator for rolling stock scheduling instances
+# Mirrors the IBM rolling stock paper (Guth Jarkovsky et al., 2026)
 import argparse
 import json
 import os
 import numpy as np
 import pandas as pd
+
+# Named station constants from Guth Jarkovsky et al. (2026) IBM rolling stock paper
+STATIONS = ["Cologne", "Munich", "Berlin", "Frankfurt", "Hamburg"]
+MAINTENANCE_STATION = "Hamburg"
+DEPOT_STATIONS = ["Cologne", "Munich", "Hamburg"]
+
+# Approximate real inter-city distances (km) and travel times (min at ~200 km/h)
+CITY_DISTANCES = {
+    ("Cologne", "Munich"): (570.0, 171),
+    ("Cologne", "Berlin"): (560.0, 168),
+    ("Cologne", "Frankfurt"): (190.0, 57),
+    ("Cologne", "Hamburg"): (430.0, 129),
+    ("Munich", "Berlin"): (580.0, 174),
+    ("Munich", "Frankfurt"): (390.0, 117),
+    ("Munich", "Hamburg"): (780.0, 234),
+    ("Berlin", "Frankfurt"): (550.0, 165),
+    ("Berlin", "Hamburg"): (280.0, 84),
+    ("Frankfurt", "Hamburg"): (490.0, 147),
+}
 
 # Convert minutes from midnight to HH:MM format string
 def minutes_to_hhmm(m: int) -> str:
@@ -11,53 +31,50 @@ def minutes_to_hhmm(m: int) -> str:
     return f"{m // 60:02d}:{m % 60:02d}"
 
 # Generate complete problem instance files
-def generate_instance(n_trips: int = 60, n_units: int = 24, n_stations: int = 8,
-                      n_depots: int = None, n_maint_depots: int = None,
+def generate_instance(n_trips: int = 60, n_units: int = 20, n_stations: int = 5,
+                      n_days: int = 2, n_depots: int = None, n_maint_depots: int = None,
                       seed: int = 42, out_dir: str = "data") -> None:
-    # Resolve default depot and maintenance facility counts if not specified
-    if n_depots is None:
-        n_depots = max(2, int(round(n_stations * 0.375)))
-    if n_maint_depots is None:
-        n_maint_depots = max(1, int(round(n_depots * 0.6)))
-
-    # Ensure depot counts do not exceed station count
-    n_depots = min(n_depots, n_stations)
-    n_maint_depots = min(n_maint_depots, n_depots)
-
-    # Operating parameters (04:00 to 24:00)
+    # Operating parameters (04:00 to 04:00 next day = 28h window, 52h window for 2 days)
     operating_start = 4 * 60
-    operating_end = 24 * 60
+    operating_end = 52 * 60
 
     # Initialize random generator with deterministic seed
     rng = np.random.default_rng(seed)
     os.makedirs(out_dir, exist_ok=True)
 
     # 1. Stations and Depots
-    station_ids = [f"S{i+1}" for i in range(n_stations)]
-    depot_ids = list(rng.choice(station_ids, size=n_depots, replace=False))
-    maint_depot_ids = list(rng.choice(depot_ids, size=n_maint_depots, replace=False))
+    station_ids = STATIONS[:n_stations]
+    depot_ids = [s for s in DEPOT_STATIONS if s in station_ids]
+    maint_depot_ids = [MAINTENANCE_STATION] if MAINTENANCE_STATION in station_ids else [station_ids[0]]
+
+    # Allow CLI overrides if explicitly passed
+    if n_depots is not None and n_depots < len(depot_ids):
+        depot_ids = depot_ids[:n_depots]
+    if n_maint_depots is not None and n_maint_depots < len(maint_depot_ids):
+        maint_depot_ids = maint_depot_ids[:n_maint_depots]
 
     stations_df = pd.DataFrame({
         "station_id": station_ids,
         "is_depot": [s in depot_ids for s in station_ids],
         "has_maintenance_facility": [s in maint_depot_ids for s in station_ids],
-        "platform_capacity": rng.integers(2, 6, size=n_stations),
+        "platform_capacity": rng.integers(2, 6, size=len(station_ids)),
     })
     stations_df.to_csv(os.path.join(out_dir, "stations.csv"), index=False)
 
     # 2. Distance and Travel Time Matrix
     dist_rows = []
-    coords = {s: rng.uniform(0, 100, size=2) for s in station_ids}
-    for i, s1 in enumerate(station_ids):
-        for j, s2 in enumerate(station_ids):
-            if s1 == s2:
-                continue
-            dist_km = round(float(np.linalg.norm(coords[s1] - coords[s2])), 1)
-            travel_min = max(5, round(dist_km * rng.uniform(0.8, 1.3)))
+    for (c1, c2), (dist_km, travel_min) in CITY_DISTANCES.items():
+        if c1 in station_ids and c2 in station_ids:
             dist_rows.append({
-                "from_station": s1,
-                "to_station": s2,
-                "distance_km": dist_km,
+                "from_station": c1,
+                "to_station": c2,
+                "distance_km": float(dist_km),
+                "travel_time_min": int(travel_min),
+            })
+            dist_rows.append({
+                "from_station": c2,
+                "to_station": c1,
+                "distance_km": float(dist_km),
                 "travel_time_min": int(travel_min),
             })
     distance_df = pd.DataFrame(dist_rows)
@@ -109,6 +126,7 @@ def generate_instance(n_trips: int = 60, n_units: int = 24, n_stations: int = 8,
         arr_time = dep_time + travel_min
         if arr_time > operating_end:
             continue
+        day = 1 if dep_time < 1440 else 2
         trip_rows.append({
             "trip_id": f"T{len(trip_rows)+1:03d}",
             "origin_station": origin,
@@ -119,6 +137,7 @@ def generate_instance(n_trips: int = 60, n_units: int = 24, n_stations: int = 8,
             "arrival_time": minutes_to_hhmm(arr_time),
             "distance_km": dist_km,
             "min_turnaround_min": int(rng.choice([10, 15, 20, 30])),
+            "day": day,
         })
 
     trips_df = pd.DataFrame(trip_rows).sort_values(["departure_min", "trip_id"]).reset_index(drop=True)
@@ -149,30 +168,14 @@ def generate_instance(n_trips: int = 60, n_units: int = 24, n_stations: int = 8,
 
     # 7. Metadata Summary Configuration
     meta = {
-        "seed": seed,
         "n_stations": n_stations,
+        "stations": station_ids,
+        "maintenance_station": MAINTENANCE_STATION,
         "depots": depot_ids,
-        "maintenance_depots": maint_depot_ids,
+        "scheduling_days": n_days,
         "n_units": n_units,
-        "unit_types": unit_types,
         "n_trips": n_trips,
-        "operating_window": [minutes_to_hhmm(operating_start), minutes_to_hhmm(operating_end)],
-        "files": {
-            "stations": "stations.csv",
-            "distance_matrix": "distance_matrix.csv",
-            "fleet": "fleet.csv",
-            "trips": "trips.csv",
-            "demand": "demand.csv",
-            "maintenance_rules": "maintenance_rules.csv",
-        },
-        "objective_hint": (
-            "Minimize total empty (deadhead) travel + number of units used + "
-            "maintenance violations, subject to: every trip covered with enough "
-            "capacity, unit continuity (a unit can only start a trip where it "
-            "ended the previous one, after turnaround time), and no unit exceeding "
-            "max_km_between_maintenance without a maintenance visit at a "
-            "maintenance-capable depot."
-        ),
+        "paper_reference": "Guth Jarkovsky et al., 2026 - Rolling Stock Planning Using QAOA",
     }
     with open(os.path.join(out_dir, "instance_meta.json"), "w") as f:
         json.dump(meta, f, indent=2)
@@ -183,8 +186,9 @@ def generate_instance(n_trips: int = 60, n_units: int = 24, n_stations: int = 8,
 def parse_args():
     parser = argparse.ArgumentParser(description="Synthetic Data Generator for Rolling Stock Scheduling")
     parser.add_argument("--n_trips", type=int, default=60, help="Number of timetable trips to generate")
-    parser.add_argument("--n_units", type=int, default=24, help="Number of rolling stock trainset units")
-    parser.add_argument("--n_stations", type=int, default=8, help="Number of network stations")
+    parser.add_argument("--n_units", type=int, default=20, help="Number of rolling stock trainset units")
+    parser.add_argument("--n_stations", type=int, default=5, help="Number of network stations")
+    parser.add_argument("--n_days", type=int, default=2, help="Number of scheduling days")
     parser.add_argument("--n_depots", type=int, default=None, help="Number of depot stations")
     parser.add_argument("--n_maint_depots", type=int, default=None, help="Number of maintenance depots")
     parser.add_argument("--seed", type=int, default=42, help="Random number generator seed")
@@ -198,6 +202,7 @@ if __name__ == "__main__":
         n_trips=args.n_trips,
         n_units=args.n_units,
         n_stations=args.n_stations,
+        n_days=args.n_days,
         n_depots=args.n_depots,
         n_maint_depots=args.n_maint_depots,
         seed=args.seed,
