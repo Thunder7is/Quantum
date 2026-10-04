@@ -1,0 +1,56 @@
+\documentclass{article}
+\usepackage{amsmath, booktabs, geometry}
+\geometry{margin=2.5cm}
+\title{Genetic Algorithm -- Mathematical Formulation}
+\author{Gati Shakti Vishwavidyalaya}
+\date{}
+\begin{document}
+\maketitle
+
+\section{What GA Does}
+GA maintains a population of 80 schedules (chromosomes) and evolves them
+over up to 300 generations using selection, crossover, and mutation.
+\textit{Code: src/algorithms/genetic\_algorithm.py, function solve\_genetic\_algorithm()}
+
+\section{Chromosome Encoding}
+A chromosome is a list of $T$ integers (one per trip):
+\[
+  C = [u_1, u_2, \ldots, u_T], \quad u_i \in \{0, 1, \ldots, N-1\}
+\]
+$u_i$ = index of the unit assigned to trip $i$ (trips sorted by departure\_min).
+\textit{Built in: solve\_genetic\_algorithm() population initialization}
+
+\section{Fitness Function}
+\[
+  fitness(C) = \text{Cost}(C) + 10 \cdot w_5 \cdot V_{time}(C)
+\]
+Lower is better. Timing violations penalized 10x extra.
+\textit{Computed by: compute\_cost() then penalty applied in evaluate loop}
+
+\section{Selection}
+Tournament selection with $k=5$: pick 5 random chromosomes, keep the best.
+\textit{Code: tournament\_select() inside solve\_genetic\_algorithm()}
+
+\section{Crossover (PMX, probability 0.85)}
+Take two cut points $a < b$. Swap genes between positions $a$ and $b$:
+\[
+  Child_1[a:b] = Parent_2[a:b], \quad Child_1[\text{rest}] = Parent_1[\text{rest}]
+\]
+After crossover: call repair\_chromosome() to fix infeasible assignments.
+\textit{Code: crossover block + repair\_chromosome() from src/utils/feasibility.py}
+
+\section{Mutation (probability 0.10 per gene)}
+Randomly replace a gene with a different valid unit index.
+\textit{Code: mutation block in solve\_genetic\_algorithm()}
+
+\section{Elitism}
+Top 2 chromosomes always survive to next generation.
+\textit{Code: elitism copy at start of each generation loop}
+
+\section{Why GA Underperforms Here}
+Crossover breaks physical continuity -- unit assigned in Parent A is now
+at a different location due to Parent B assignments. The result is
+trains that teleport between stations. Repair fixes some but not all.
+Cost at 60 trips: 7,910.6 (worse than greedy at 5,696.9).
+
+\end{document}
