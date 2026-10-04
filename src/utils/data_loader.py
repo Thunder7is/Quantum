@@ -53,8 +53,8 @@ def load_instance(data_dir: str = DEFAULT_DATA_DIR) -> dict:
     # Extract set of station identifiers equipped with maintenance facilities
     maint_depot_set = set(stations[stations["has_maintenance_facility"].astype(bool)]["station_id"])
 
-    # Return structured instance dictionary
-    return {
+    # Construct structured instance dictionary
+    instance = {
         "stations": stations,
         "fleet": fleet,
         "trips": trips,
@@ -63,6 +63,10 @@ def load_instance(data_dir: str = DEFAULT_DATA_DIR) -> dict:
         "depot_set": depot_set,
         "maint_depot_set": maint_depot_set,
     }
+    instance["maintenance_station"] = list(maint_depot_set)[0] if maint_depot_set else None
+    instance["n_days"] = 2  # paper uses 2-day scheduling window
+
+    return instance
 
 # Build dictionary lookups for fast evaluations in optimization loops
 def get_lookups(fleet, trips):
@@ -71,3 +75,8 @@ def get_lookups(fleet, trips):
     # Fast row lookup dictionary for trips
     trips_lookup = {r.trip_id: r._asdict() for r in trips.itertuples(index=False)}
     return fleet_lookup, trips_lookup
+
+# Determine scheduling day from departure minute offset
+def get_day(departure_min: int) -> int:
+    # Returns 1 for day-1 trips, 2 for day-2 trips
+    return 1 if departure_min < 1440 else 2
