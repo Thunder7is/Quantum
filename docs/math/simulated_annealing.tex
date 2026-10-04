@@ -1,0 +1,54 @@
+\documentclass{article}
+\usepackage{amsmath, booktabs, geometry}
+\geometry{margin=2.5cm}
+\title{Simulated Annealing -- Mathematical Formulation}
+\author{Gati Shakti Vishwavidyalaya}
+\date{}
+\begin{document}
+\maketitle
+
+\section{What SA Does}
+SA starts from the greedy solution and iteratively applies small random
+moves, accepting improvements always and worse solutions with decreasing probability.
+\textit{Code: src/algorithms/simulated\_annealing.py, function solve\_simulated\_annealing()}
+
+\section{Acceptance Rule (Metropolis Criterion)}
+\[
+  P(\text{accept worse move}) = e^{-\Delta C / T_k}
+\]
+Where $\Delta C = C_{new} - C_{current} > 0$ and $T_k$ is current temperature.
+\textit{Used in: solve\_simulated\_annealing() acceptance block}
+
+\section{Cooling Schedule}
+\[
+  T_{k+1} = T_k \cdot r
+\]
+Parameters in code: $T_0 = 500$, $r = 0.995$, $T_{min} = 0.5$, 40 iterations per temperature.
+\textit{Defined as: initial\_temp, cooling\_rate, min\_temp in solve\_simulated\_annealing()}
+
+\section{Neighbourhood Moves}
+Three moves applied randomly at each iteration:
+
+\begin{tabular}{lll}
+\toprule
+Move & What it does & Code function \\
+\midrule
+Relocate & Move one trip from unit $u_1$ to unit $u_2$ & move\_relocate() \\
+Swap & Exchange one trip between two units & move\_swap() \\
+Couple/Decouple & Add or remove a second unit on a trip & move\_couple\_decouple() \\
+\bottomrule
+\end{tabular}
+
+\section{Objective}
+Same cost function as Greedy:
+\[
+  \text{Cost} = w_1 D_{head} + w_2 N_{units} + w_3 V_{maint} + w_4 P_{uncov} + w_5 V_{time}
+\]
+\textit{Computed by: compute\_cost() after every accepted move}
+
+\section{Result in Our Experiment}
+SA reduced cost from 5,696.9 (greedy) to 4,074.1 -- a 28.5\% improvement.
+Zero timing violations. This is the best classical result.
+SA is analogous to classical annealing; QAOA in the paper is its quantum equivalent.
+
+\end{document}
