@@ -1,0 +1,84 @@
+\documentclass{article}
+\usepackage{amsmath, booktabs, geometry}
+\geometry{margin=2.5cm}
+\title{Rolling Stock Scheduling -- Problem Formulation}
+\author{Gati Shakti Vishwavidyalaya}
+\date{}
+\begin{document}
+\maketitle
+
+\section{Problem Overview}
+Assign $N$ train units to $T$ timetabled trips across $S$ stations over $D$ days.
+Every trip must be covered, physical continuity must hold, and operational cost minimized.
+This matches the structure in Guth Jarkovsky et al. (2026) adapted to our 5-station German network.
+
+\section{Sets and Parameters}
+\begin{tabular}{lll}
+\toprule
+Symbol & Meaning & Code location \\
+\midrule
+$U$ & Set of train units & fleet.csv, fleet\_lookup in data\_loader.py \\
+$T$ & Set of scheduled trips & trips.csv, trips\_lookup in data\_loader.py \\
+$S$ & Set of stations & stations.csv \\
+$d_{ij}$ & Distance (km) from station $i$ to $j$ & distance\_matrix.csv, dist\_lookup \\
+$t_{ij}$ & Travel time (min) from $i$ to $j$ & dist\_lookup[(i,j)][0] \\
+$cap_u$ & Passenger capacity of unit $u$ & fleet.csv capacity column \\
+$km\_max_u$ & Max km before maintenance & maintenance\_rules.csv, maint\_lookup \\
+$dep_u$ & Departure minute of trip $t$ & trips.csv departure\_min column \\
+\bottomrule
+\end{tabular}
+
+\section{Decision Variables}
+Let $x_{u,t} \in \{0, 1\}$ mean unit $u$ is assigned to trip $t$.
+In code: chains dict where chains[unit\_id] = list of trip\_ids.
+
+\section{Objective Function}
+\textit{Used in: src/utils/cost.py, function compute\_cost()}
+
+Minimize total operational cost:
+\[
+  \text{Cost} = w_1 \cdot D_{head} + w_2 \cdot N_{units} + w_3 \cdot V_{maint} + w_4 \cdot P_{uncov} + w_5 \cdot V_{time}
+\]
+
+Where:
+\begin{itemize}
+  \item $D_{head}$ = total empty (deadhead) kilometers traveled
+  \item $N_{units}$ = number of train units activated
+  \item $V_{maint}$ = total km exceeding maintenance threshold
+  \item $P_{uncov}$ = total uncovered passenger demand
+  \item $V_{time}$ = number of timing constraint violations
+  \item Weights: $w_1=1, w_2=150, w_3=5, w_4=2, w_5=1000$ (DEFAULT\_WEIGHTS in cost.py)
+\end{itemize}
+
+\section{Constraints}
+
+\subsection{Trip Coverage}
+Every trip must have enough capacity:
+\[
+  \sum_{u \in U} x_{u,t} \cdot cap_u \geq demand_t \quad \forall t \in T
+\]
+\textit{Checked in: compute\_cost() via capacity\_supplied dict}
+
+\subsection{Continuity Constraint}
+Unit $u$ can start trip $t_2$ only after finishing $t_1$ and traveling to the new origin:
+\[
+  arr_{t_1} + turnaround_{t_1} + t_{dest(t_1),\, orig(t_2)} \leq dep_{t_2}
+\]
+\textit{Checked in: src/utils/feasibility.py, function is\_feasible\_arc()}
+
+\subsection{Maintenance Constraint}
+Total km for unit $u$ must not exceed maintenance threshold:
+\[
+  \sum_{t \in chain_u} (d_{head,t} + dist_t) \leq km\_max_u
+\]
+\textit{Tracked in: compute\_cost() via km\_since\_maint accumulator}
+
+\section{Connection to Paper}
+This formulation directly mirrors the rolling stock planning problem in
+Guth Jarkovsky et al. (2026), where the objective is to minimize empty kilometers
+while satisfying trip coverage, continuity, and maintenance constraints.
+Their QAOA approach encodes these constraints as a QUBO energy landscape.
+Our algorithms (Greedy, SA, GA, NSGA-II) solve the same formulation classically,
+establishing baselines before the QUBO quantum phase.
+
+\end{document}
