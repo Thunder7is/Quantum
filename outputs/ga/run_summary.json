@@ -1,13 +1,13 @@
 {
   "breakdown": {
-    "total": 7910.6,
-    "deadhead_km": 2574.6,
-    "units_used": 23,
+    "total": 18636.0,
+    "deadhead_km": 14620.0,
+    "units_used": 20,
     "maintenance_violation_km": 0.0,
-    "uncovered_demand": 943,
+    "uncovered_demand": 508,
     "timing_violations": 0
   },
-  "generations": 178,
+  "generations": 159,
   "hyperparameters": {
     "population_size": 80,
     "max_generations": 300,
