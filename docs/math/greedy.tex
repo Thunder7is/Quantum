@@ -1,0 +1,41 @@
+\documentclass{article}
+\usepackage{amsmath, booktabs, geometry}
+\geometry{margin=2.5cm}
+\title{Greedy Dispatch -- Mathematical Formulation}
+\author{Gati Shakti Vishwavidyalaya}
+\date{}
+\begin{document}
+\maketitle
+
+\section{What Greedy Does}
+Greedy assigns trips to units one at a time in departure-time order.
+No lookahead, no correction. Single forward pass.
+\textit{Code: src/algorithms/greedy.py, uses greedy\_construction() from src/utils/greedy\_init.py}
+
+\section{Assignment Rule}
+For each trip $t$ sorted by $dep_t$ (departure minute):
+\[
+  u^* = \arg\min_{u \in U_{avail}(t)} \; t_{loc(u),\, orig(t)}
+\]
+Where $U_{avail}(t)$ = units that can reach $orig(t)$ before $dep_t$.
+
+Assign trip $t$ to unit $u^*$. Update unit location and availability.
+
+\section{Cost Evaluated After Assignment}
+\[
+  \text{Cost}_{greedy} = w_1 D_{head} + w_2 N_{units} + w_4 P_{uncov}
+\]
+No timing violations by construction (only feasible arcs assigned).
+\textit{Computed by: compute\_cost() in src/utils/cost.py}
+
+\section{Complexity}
+Time: $O(T \cdot N)$ where $T$ = trips, $N$ = units. \\
+Space: $O(T + N)$. \\
+Greedy MWIS complexity as per Guth Jarkovsky et al.: $O(|V|^2)$.
+
+\section{Why Greedy Fails}
+A locally optimal early assignment can prevent globally better assignments later.
+In our experiment: 756 passengers uncovered, 5 overloaded trips.
+This mirrors the paper's finding: greedy lacks foresight for global solution quality.
+
+\end{document}
