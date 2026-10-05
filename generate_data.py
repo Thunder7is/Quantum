@@ -28,6 +28,21 @@ CITY_DISTANCES = {
     ("Kolkata", "Chennai"): (1660.0, 766),
 }
 
+# Returns earliest minute any unit can reach station from any depot
+def get_min_reachable_time(origin: str, depot_stations: list,
+                            city_distances: dict) -> int:
+    min_time = 0
+    if origin in depot_stations:
+        return 0
+    travel_times = []
+    for depot in depot_stations:
+        key = (depot, origin)
+        if key in city_distances:
+            travel_times.append(city_distances[key][1])
+        elif (origin, depot) in city_distances:
+            travel_times.append(city_distances[(origin, depot)][1])
+    return min(travel_times) if travel_times else 0
+
 # Convert minutes from midnight to HH:MM format string
 def minutes_to_hhmm(m: int) -> str:
     m = int(m) % (24 * 60)
@@ -126,6 +141,20 @@ def generate_instance(n_trips: int = 30, n_units: int = 30, n_stations: int = 5,
         origin, dest = rng.choice(station_ids, size=2, replace=False)
         dep_time = int(rng.integers(operating_start, operating_end - 30))
         travel_min, dist_km = dist_map[(origin, dest)]
+
+        # Ensure non-depot origin trips depart after units can reach them
+        min_reach = get_min_reachable_time(
+            origin, DEPOT_STATIONS, CITY_DISTANCES
+        )
+        departure_min = dep_time
+        destination = dest
+        if departure_min < min_reach + 60:
+            departure_min = min_reach + 60
+            # Recalculate arrival_min
+            travel_time = dist_map.get((origin, destination), (0, 0))[0]
+            arrival_min = departure_min + travel_time
+            dep_time = departure_min
+            arr_time = arrival_min
 
         # Enforce minimum departure gap between consecutive trips on the same route
         same_route = [r for r in trip_rows if r["origin_station"] == origin and r["destination_station"] == dest]

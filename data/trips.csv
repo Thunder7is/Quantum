@@ -1,10 +1,10 @@
 trip_id,origin_station,destination_station,departure_min,arrival_min,departure_time,arrival_time,distance_km,min_turnaround_min,day
-T018,Chennai,Bangalore,304,470,05:04,07:50,360.0,10,1
+T026,Mumbai,Chennai,367,981,06:07,16:21,1330.0,15,1
 T016,Bangalore,Mumbai,534,986,08:54,16:26,980.0,10,1
-T024,Chennai,Kolkata,547,1313,09:07,21:53,1660.0,20,1
 T011,Mumbai,Bangalore,603,1055,10:03,17:35,980.0,15,1
+T027,Delhi,Chennai,671,1677,11:11,03:57,2180.0,30,1
+T018,Chennai,Bangalore,674,840,11:14,14:00,360.0,10,1
 T021,Delhi,Bangalore,698,1690,11:38,04:10,2150.0,20,1
-T027,Delhi,Chennai,755,1761,12:35,05:21,2180.0,10,1
 T015,Chennai,Mumbai,776,1390,12:56,23:10,1330.0,15,1
 T030,Mumbai,Kolkata,894,1803,14:54,06:03,1970.0,15,1
 T008,Kolkata,Delhi,997,1675,16:37,03:55,1470.0,30,1
@@ -16,6 +16,7 @@ T007,Chennai,Delhi,1216,2222,20:16,13:02,2180.0,10,1
 T006,Bangalore,Delhi,1325,2317,22:05,14:37,2150.0,10,1
 T002,Chennai,Kolkata,1398,2164,23:18,12:04,1660.0,15,1
 T017,Kolkata,Chennai,1514,2280,01:14,14:00,1660.0,15,2
+T025,Delhi,Chennai,1551,2557,01:51,18:37,2180.0,30,2
 T019,Bangalore,Kolkata,1571,2434,02:11,16:34,1870.0,30,2
 T020,Chennai,Mumbai,1626,2240,03:06,13:20,1330.0,20,2
 T013,Kolkata,Mumbai,1644,2553,03:24,18:33,1970.0,20,2
@@ -24,8 +25,7 @@ T001,Bangalore,Mumbai,1679,2131,03:59,11:31,980.0,30,2
 T009,Kolkata,Delhi,1797,2475,05:57,17:15,1470.0,20,2
 T012,Kolkata,Bangalore,1815,2678,06:15,20:38,1870.0,15,2
 T028,Delhi,Kolkata,1992,2670,09:12,20:30,1470.0,10,2
-T026,Mumbai,Bangalore,2097,2549,10:57,18:29,980.0,15,2
-T025,Chennai,Kolkata,2198,2964,12:38,01:24,1660.0,10,2
+T024,Chennai,Kolkata,2198,2964,12:38,01:24,1660.0,20,2
 T029,Mumbai,Delhi,2291,2937,14:11,00:57,1400.0,30,2
 T004,Mumbai,Chennai,2298,2912,14:18,00:32,1330.0,20,2
 T014,Chennai,Bangalore,2827,2993,23:07,01:53,360.0,10,2
