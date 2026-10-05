@@ -1,20 +1,20 @@
 {
   "n_stations": 5,
   "stations": [
-    "Cologne",
-    "Munich",
-    "Berlin",
-    "Frankfurt",
-    "Hamburg"
+    "Mumbai",
+    "Delhi",
+    "Bangalore",
+    "Kolkata",
+    "Chennai"
   ],
-  "maintenance_station": "Hamburg",
+  "maintenance_station": "Kolkata",
   "depots": [
-    "Cologne",
-    "Munich",
-    "Hamburg"
+    "Mumbai",
+    "Delhi",
+    "Kolkata"
   ],
   "scheduling_days": 2,
   "n_units": 20,
   "n_trips": 60,
-  "paper_reference": "Guth Jarkovsky et al., 2026 - Rolling Stock Planning Using QAOA"
+  "paper_reference": "Guth Jarkovsky et al., 2026 - adapted to Indian Railway Network"
 }

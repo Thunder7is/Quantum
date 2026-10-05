@@ -1,28 +1,28 @@
 # Synthetic data generator for rolling stock scheduling instances
-# Mirrors the IBM rolling stock paper (Guth Jarkovsky et al., 2026)
+# Mirrors the IBM rolling stock paper (Guth Jarkovsky et al., 2026) adapted to Indian Railway Network
 import argparse
 import json
 import os
 import numpy as np
 import pandas as pd
 
-# Named station constants from Guth Jarkovsky et al. (2026) IBM rolling stock paper
-STATIONS = ["Cologne", "Munich", "Berlin", "Frankfurt", "Hamburg"]
-MAINTENANCE_STATION = "Hamburg"
-DEPOT_STATIONS = ["Cologne", "Munich", "Hamburg"]
+# Named station constants adapted to Indian Railway Network
+STATIONS = ["Mumbai", "Delhi", "Bangalore", "Kolkata", "Chennai"]
+MAINTENANCE_STATION = "Kolkata"
+DEPOT_STATIONS = ["Mumbai", "Delhi", "Kolkata"]
 
-# Approximate real inter-city distances (km) and travel times (min at ~200 km/h)
+# Approximate real Indian inter-city rail distances (km) and travel times (min at ~130 km/h)
 CITY_DISTANCES = {
-    ("Cologne", "Munich"): (570.0, 171),
-    ("Cologne", "Berlin"): (560.0, 168),
-    ("Cologne", "Frankfurt"): (190.0, 57),
-    ("Cologne", "Hamburg"): (430.0, 129),
-    ("Munich", "Berlin"): (580.0, 174),
-    ("Munich", "Frankfurt"): (390.0, 117),
-    ("Munich", "Hamburg"): (780.0, 234),
-    ("Berlin", "Frankfurt"): (550.0, 165),
-    ("Berlin", "Hamburg"): (280.0, 84),
-    ("Frankfurt", "Hamburg"): (490.0, 147),
+    ("Mumbai", "Delhi"): (1400.0, 646),
+    ("Mumbai", "Bangalore"): (980.0, 452),
+    ("Mumbai", "Kolkata"): (1970.0, 909),
+    ("Mumbai", "Chennai"): (1330.0, 614),
+    ("Delhi", "Bangalore"): (2150.0, 992),
+    ("Delhi", "Kolkata"): (1470.0, 678),
+    ("Delhi", "Chennai"): (2180.0, 1006),
+    ("Bangalore", "Kolkata"): (1870.0, 863),
+    ("Bangalore", "Chennai"): (360.0, 166),
+    ("Kolkata", "Chennai"): (1660.0, 766),
 }
 
 # Convert minutes from midnight to HH:MM format string
@@ -175,7 +175,7 @@ def generate_instance(n_trips: int = 60, n_units: int = 20, n_stations: int = 5,
         "scheduling_days": n_days,
         "n_units": n_units,
         "n_trips": n_trips,
-        "paper_reference": "Guth Jarkovsky et al., 2026 - Rolling Stock Planning Using QAOA",
+        "paper_reference": "Guth Jarkovsky et al., 2026 - adapted to Indian Railway Network",
     }
     with open(os.path.join(out_dir, "instance_meta.json"), "w") as f:
         json.dump(meta, f, indent=2)
