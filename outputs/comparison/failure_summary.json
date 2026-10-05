@@ -1,14 +1,14 @@
 {
   "greedy": {
-    "timing_violations": 42,
+    "timing_violations": 2,
     "uncovered_trips": 0,
-    "uncovered_demand_pax": 3315,
-    "total_cost": 164815.0
+    "uncovered_demand_pax": 0,
+    "total_cost": 18040.0
   },
   "sa": {
-    "timing_violations": 17,
+    "timing_violations": 2,
     "uncovered_trips": 0,
-    "uncovered_demand_pax": 1205,
-    "total_cost": 35970.0
+    "uncovered_demand_pax": 0,
+    "total_cost": 11520.0
   }
 }
