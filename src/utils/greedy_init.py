@@ -73,9 +73,20 @@ def greedy_construction(instance: dict, *args, **kwargs) -> dict:
                 second_uid = candidates[1][1]
                 chosen.append(second_uid)
         else:
-            # Fallback assignment to unit with earliest availability
-            earliest_uid = min(unit_state, key=lambda u: unit_state[u]["avail_time"])
+            # Fallback: find unit with minimum arrival time at trip origin
+            def arrival_at_origin(uid):
+                state = unit_state[uid]
+                tt, _ = travel(dist_lookup, state["location"], trip["origin_station"])
+                return state["avail_time"] + tt
+
+            # Sort all units by earliest possible arrival at trip origin
+            all_units_sorted = sorted(unit_state.keys(), key=arrival_at_origin)
+            earliest_uid = all_units_sorted[0]
             chosen.append(earliest_uid)
+            # Add second unit if single-unit capacity is less than demand
+            if unit_state[earliest_uid]["capacity"] < needed_demand:
+                if len(all_units_sorted) > 1:
+                    chosen.append(all_units_sorted[1])
 
         # Update spatial and temporal state of selected units
         for uid in chosen:
