@@ -2,25 +2,25 @@
   "n_pareto_solutions": 60,
   "objectives_summary": {
     "f1_deadhead_km": {
-      "min": 8130.0,
-      "max": 13820.0
+      "min": 26680.0,
+      "max": 34760.0
     },
     "f2_units_used": {
-      "min": 16,
+      "min": 20,
       "max": 20
     },
     "f3_demand_penalty": {
-      "min": 83.0,
-      "max": 1138.0
+      "min": 4353.0,
+      "max": 4808.0
     }
   },
   "best_compromise_breakdown": {
-    "total": 14366.0,
-    "deadhead_km": 11200.0,
+    "total": 98750.0,
+    "deadhead_km": 31130.0,
     "units_used": 20,
-    "maintenance_violation_km": 0.0,
-    "uncovered_demand": 83,
-    "timing_violations": 0
+    "maintenance_violation_km": 4840.0,
+    "uncovered_demand": 684,
+    "timing_violations": 37
   },
   "algorithm": "nsga2",
   "generations": 200,
