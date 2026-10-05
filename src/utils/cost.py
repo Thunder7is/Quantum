@@ -7,7 +7,7 @@ DEFAULT_WEIGHTS = {
     "deadhead": 1.0,
     "activation": 150.0,
     "maintenance": 5.0,
-    "demand": 2.0,
+    "demand": 5.0,
     "timing_violation": 1000.0,
 }
 
