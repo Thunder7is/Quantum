@@ -54,14 +54,17 @@ def compute_cost(chains: dict, trips_df, fleet_df, dist_lookup, maint_lookup, we
         # Track movements along chain
         for tid in chain_sorted:
             trip = trips_lookup[tid]
-            capacity_supplied[tid] += unit_cap
             # Repositioning travel from current location to trip origin
             travel_time, deadhead_km = travel(dist_lookup, location, trip["origin_station"])
             total_deadhead_km += deadhead_km
-            # Check timing feasibility of arrival before scheduled departure
+            # Check timing feasibility before crediting capacity
             arrival_at_origin = avail_time + travel_time
             if arrival_at_origin > trip["departure_min"]:
                 timing_violations += 1
+                # Do NOT credit capacity for infeasible assignments
+            else:
+                # Only credit capacity when unit can physically make it
+                capacity_supplied[tid] += unit_cap
             # Accumulate mileage and record maintenance overruns
             km_since_maint += deadhead_km + trip["distance_km"]
             if km_since_maint > max_km:
