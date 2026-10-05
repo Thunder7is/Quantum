@@ -11,6 +11,9 @@ STATIONS = ["Mumbai", "Delhi", "Bangalore", "Kolkata", "Chennai"]
 MAINTENANCE_STATION = "Kolkata"
 DEPOT_STATIONS = ["Mumbai", "Delhi", "Kolkata"]
 
+# Minimum departure gap between consecutive trips on the same route (minutes)
+MIN_DEPARTURE_GAP_MIN = 800
+
 # Approximate real Indian inter-city rail distances (km) and travel times (min at ~130 km/h)
 CITY_DISTANCES = {
     ("Mumbai", "Delhi"): (1400.0, 646),
@@ -31,7 +34,7 @@ def minutes_to_hhmm(m: int) -> str:
     return f"{m // 60:02d}:{m % 60:02d}"
 
 # Generate complete problem instance files
-def generate_instance(n_trips: int = 60, n_units: int = 20, n_stations: int = 5,
+def generate_instance(n_trips: int = 30, n_units: int = 30, n_stations: int = 5,
                       n_days: int = 2, n_depots: int = None, n_maint_depots: int = None,
                       seed: int = 42, out_dir: str = "data") -> None:
     # Operating parameters (04:00 to 04:00 next day = 28h window, 52h window for 2 days)
@@ -123,9 +126,21 @@ def generate_instance(n_trips: int = 60, n_units: int = 20, n_stations: int = 5,
         origin, dest = rng.choice(station_ids, size=2, replace=False)
         dep_time = int(rng.integers(operating_start, operating_end - 30))
         travel_min, dist_km = dist_map[(origin, dest)]
-        arr_time = dep_time + travel_min
-        if arr_time > operating_end:
+
+        # Enforce minimum departure gap between consecutive trips on the same route
+        same_route = [r for r in trip_rows if r["origin_station"] == origin and r["destination_station"] == dest]
+        for r in same_route:
+            if abs(dep_time - r["departure_min"]) < MIN_DEPARTURE_GAP_MIN:
+                dep_time = max(dep_time, r["departure_min"]) + MIN_DEPARTURE_GAP_MIN
+
+        # Verify no remaining departure conflict exists on this route
+        if any(abs(dep_time - r["departure_min"]) < MIN_DEPARTURE_GAP_MIN for r in same_route):
             continue
+
+        arr_time = dep_time + travel_min
+        if arr_time >= 3000 or arr_time > operating_end:
+            continue
+
         day = 1 if dep_time < 1440 else 2
         trip_rows.append({
             "trip_id": f"T{len(trip_rows)+1:03d}",
@@ -185,8 +200,8 @@ def generate_instance(n_trips: int = 60, n_units: int = 20, n_stations: int = 5,
 # Parse command line arguments
 def parse_args():
     parser = argparse.ArgumentParser(description="Synthetic Data Generator for Rolling Stock Scheduling")
-    parser.add_argument("--n_trips", type=int, default=60, help="Number of timetable trips to generate")
-    parser.add_argument("--n_units", type=int, default=20, help="Number of rolling stock trainset units")
+    parser.add_argument("--n_trips", type=int, default=30, help="Number of timetable trips to generate")
+    parser.add_argument("--n_units", type=int, default=30, help="Number of rolling stock trainset units")
     parser.add_argument("--n_stations", type=int, default=5, help="Number of network stations")
     parser.add_argument("--n_days", type=int, default=2, help="Number of scheduling days")
     parser.add_argument("--n_depots", type=int, default=None, help="Number of depot stations")

@@ -14,7 +14,7 @@
     "Kolkata"
   ],
   "scheduling_days": 2,
-  "n_units": 20,
-  "n_trips": 60,
+  "n_units": 30,
+  "n_trips": 30,
   "paper_reference": "Guth Jarkovsky et al., 2026 - adapted to Indian Railway Network"
 }
