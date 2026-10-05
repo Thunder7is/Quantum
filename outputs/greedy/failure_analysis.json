@@ -1,8 +1,5 @@
 {
-  "timing_violations": [
-    "T018",
-    "T024"
-  ],
+  "timing_violations": [],
   "uncovered_trips": [],
   "overloaded_trips": []
 }
