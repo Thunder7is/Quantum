@@ -26,7 +26,7 @@ except (ImportError, ValueError):
     from src.utils.viz import plot_cost_history
 
 # NSGA-II hyperparameters matching research specification
-POPULATION_SIZE = 60
+POPULATION_SIZE = 80
 GENERATIONS = 200
 ETA_C = 15.0
 CROSSOVER_PROB = 0.9
@@ -66,8 +66,8 @@ def evaluate_chromosome(chromosome: list, fleet_list: list, trips_list: list, ty
     bd = compute_cost(chains, trips_lookup, fleet_lookup, dist_lookup, maint_lookup)
     # Objective 1: Deadhead transit kilometers
     f1 = float(bd.get("deadhead_km", bd.get("total_deadhead_km", 0.0)))
-    # Objective 2: Number of distinct trainset units activated
-    f2 = float(bd.get("units_used", 0))
+    # Objective 2: Total activation cost (units_used * 150)
+    f2 = float(bd.get("units_used", 0) * 150.0)
     # Objective 3: Uncovered passenger demand + 100x timing violations constraint penalty
     uncovered = float(bd.get("uncovered_demand", bd.get("uncovered_demand_passengers", 0)))
     timing = float(bd.get("timing_violations", 0))
@@ -166,20 +166,21 @@ def sbx_crossover(parent1: list, parent2: list, num_units: int, rng: random.Rand
 
     return child1, child2
 
-# Polynomial mutation with distribution index eta=20 and prob=1/n_genes
-def polynomial_mutation(chromosome: list, num_units: int, rng: random.Random) -> list:
+# Polynomial mutation with distribution index eta and mutation probability
+def polynomial_mutation(chromosome: list, num_units: int, rng: random.Random,
+                        eta: float = ETA_M, prob: float = None) -> list:
     mutated = list(chromosome)
     length = len(mutated)
-    mut_prob = 1.0 / length
+    mut_prob = prob if prob is not None else (1.0 / length)
 
     for i in range(length):
         if rng.random() < mut_prob:
             val = float(mutated[i])
             u = rng.random()
             if u <= 0.5:
-                delta = (2.0 * u) ** (1.0 / (ETA_M + 1.0)) - 1.0
+                delta = (2.0 * u) ** (1.0 / (eta + 1.0)) - 1.0
             else:
-                delta = 1.0 - (2.0 * (1.0 - u)) ** (1.0 / (ETA_M + 1.0))
+                delta = 1.0 - (2.0 * (1.0 - u)) ** (1.0 / (eta + 1.0))
             new_val = val + delta * (num_units - 1)
             mutated[i] = int(round(max(0, min(num_units - 1, new_val))))
 
@@ -187,7 +188,9 @@ def polynomial_mutation(chromosome: list, num_units: int, rng: random.Random) ->
 
 # Core NSGA-II optimization solver
 def solve_nsga2(fleet, trips, dist_lookup, maint_lookup,
-                pop_size=POPULATION_SIZE, generations=GENERATIONS, seed=SEED):
+                pop_size=POPULATION_SIZE, generations=GENERATIONS, seed=SEED, **kwargs):
+    population_size = kwargs.get("population_size", pop_size)
+    pop_size = population_size
     rng = random.Random(seed)
     fleet_lookup, trips_lookup = get_lookups(fleet, trips)
     trips_sorted = trips.sort_values("departure_min").reset_index(drop=True)
@@ -321,6 +324,17 @@ def solve_nsga2(fleet, trips, dist_lookup, maint_lookup,
                 break
 
         population = next_population
+
+        # Diversity injection step every 20 generations to prevent Pareto front collapse
+        finite_cds = [c for c in crowding.values() if c != float("inf")]
+        avg_crowding = (sum(finite_cds) / len(finite_cds)) if finite_cds else 0.0
+        if avg_crowding < 0.01 and gen % 20 == 0:
+            random_sample = rng.sample
+            for idx in random_sample(range(pop_size), min(10, pop_size)):
+                population[idx] = polynomial_mutation(
+                    population[idx], num_units, rng, eta=5, prob=0.3)
+                population[idx] = repair_chromosome(
+                    population[idx], fleet_list, trips_list, dist_lookup)
 
     # Final population evaluation on repaired chromosomes
     final_eval = [
