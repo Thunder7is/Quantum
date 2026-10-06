@@ -137,6 +137,7 @@ def generate_instance(n_trips: int = 30, n_units: int = 30, n_stations: int = 5,
 
     # 5. Scheduled Timetable Trips
     trip_rows = []
+    placed_trips = []
     while len(trip_rows) < n_trips:
         origin, dest = rng.choice(station_ids, size=2, replace=False)
         dep_time = int(rng.integers(operating_start, operating_end - 30))
@@ -148,13 +149,23 @@ def generate_instance(n_trips: int = 30, n_units: int = 30, n_stations: int = 5,
         )
         departure_min = dep_time
         destination = dest
+        travel_time = dist_map.get((origin, destination), (0, 0))[0]
         if departure_min < min_reach + 60:
             departure_min = min_reach + 60
             # Recalculate arrival_min
-            travel_time = dist_map.get((origin, destination), (0, 0))[0]
             arrival_min = departure_min + travel_time
             dep_time = departure_min
             arr_time = arrival_min
+
+        # Resolve scheduling conflicts with already-placed trips at same station
+        for placed_trip in placed_trips:
+            if placed_trip['destination_station'] == origin:
+                earliest_ok = placed_trip['arrival_min'] + placed_trip['min_turnaround_min']
+                if placed_trip['arrival_min'] <= departure_min < earliest_ok:
+                    departure_min = earliest_ok + 5  # 5 min buffer
+                    arrival_min = departure_min + travel_time
+                    dep_time = departure_min
+                    arr_time = arrival_min
 
         # Enforce minimum departure gap between consecutive trips on the same route
         same_route = [r for r in trip_rows if r["origin_station"] == origin and r["destination_station"] == dest]
@@ -183,6 +194,20 @@ def generate_instance(n_trips: int = 30, n_units: int = 30, n_stations: int = 5,
             "min_turnaround_min": int(rng.choice([10, 15, 20, 30])),
             "day": day,
         })
+        placed_trips.append(trip_rows[-1])
+
+    # Resolve scheduling conflicts across all placed trips
+    for t1 in trip_rows:
+        for t2 in trip_rows:
+            if t1['destination_station'] == t2['origin_station']:
+                earliest_ok = t1['arrival_min'] + t1['min_turnaround_min']
+                if t1['arrival_min'] <= t2['departure_min'] < earliest_ok:
+                    t2['departure_min'] = earliest_ok + 5
+                    travel_t = dist_map[(t2['origin_station'], t2['destination_station'])][0]
+                    t2['arrival_min'] = t2['departure_min'] + travel_t
+                    t2['departure_time'] = minutes_to_hhmm(t2['departure_min'])
+                    t2['arrival_time'] = minutes_to_hhmm(t2['arrival_min'])
+                    t2['day'] = 1 if t2['departure_min'] < 1440 else 2
 
     trips_df = pd.DataFrame(trip_rows).sort_values(["departure_min", "trip_id"]).reset_index(drop=True)
     trips_df.to_csv(os.path.join(out_dir, "trips.csv"), index=False)
@@ -198,7 +223,7 @@ def generate_instance(n_trips: int = 30, n_units: int = 30, n_stations: int = 5,
             return rng.uniform(0.5, 0.9)
 
     demand_rows = []
-    base_demand = rng.integers(200, 500, size=len(trips_df))
+    base_demand = rng.integers(400, 900, size=len(trips_df))
     for i, row in trips_df.iterrows():
         mult = peak_multiplier(row.departure_min)
         demand = int(base_demand[i] * mult)
