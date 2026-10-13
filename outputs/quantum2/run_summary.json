@@ -1,0 +1,48 @@
+{
+  "breakdown": {
+    "total": 26980.0,
+    "deadhead_km": 10550.0,
+    "units_used": 27,
+    "maintenance_violation_km": 0.0,
+    "uncovered_demand": 2476,
+    "timing_violations": 0
+  },
+  "qubo_statistics": {
+    "n_variables": 900,
+    "n_qubits_needed": 900,
+    "n_trips": 30,
+    "n_units": 30,
+    "n_quadratic_interactions": 23490,
+    "qubo_density": 0.0581,
+    "linear_min": -6000.0,
+    "linear_max": -3820.0,
+    "quadratic_min": 2000.0,
+    "quadratic_max": 6000.0,
+    "offset": 90000.0,
+    "penalty_weights": {
+      "lambda_coverage": 3000.0,
+      "lambda_continuity": 2000.0,
+      "lambda_maintenance": 1000.0,
+      "lambda_demand": 500.0,
+      "w_deadhead": 1.0
+    }
+  },
+  "hyperparameters": {
+    "sampler": "TabuSampler",
+    "tabu_num_reads": 4800,
+    "tabu_tenure": 30,
+    "tabu_timeout_sec": 1500,
+    "neal_num_reads": 500,
+    "neal_num_sweeps": 3000,
+    "dimod_num_reads": null,
+    "dimod_num_sweeps": null,
+    "lambda_coverage": 3000.0,
+    "lambda_continuity": 2000.0,
+    "lambda_maintenance": 1000.0,
+    "w_deadhead": 1.0
+  },
+  "sampling_time_sec": 7229.023,
+  "sampler": "D-Wave TabuSampler \u2014 quantum-inspired tabu search (best classical QUBO solver)",
+  "algorithm": "quantum_annealing_qubo",
+  "paper_reference": "Guth Jarkovsky et al. 2026 \u2014 adapted for Indian Railway Network"
+}

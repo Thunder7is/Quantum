@@ -1,5 +1,10 @@
 {
   "timing_violations": [],
   "uncovered_trips": [],
-  "overloaded_trips": []
+  "overloaded_trips": [
+    "T007",
+    "T010",
+    "T023",
+    "T027"
+  ]
 }

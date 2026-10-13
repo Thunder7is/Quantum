@@ -28,14 +28,14 @@ Rolling stock scheduling and circulation requires assigning physical trainsets t
 
 ## Results Preview
 
-Benchmark performance across a standardized 60-trip, 24-unit timetable instance:
+Benchmark performance across a standardized 30-trip, 30-unit timetable instance:
 
 | Algorithm | Best Cost | Deadhead km | Units Used | Uncovered Demand | Timing Violations |
 | :--- | :---: | :---: | :---: | :---: | :---: |
-| **Greedy** | 5,696.9 | 1,184.9 | 20 | 756 | 0 |
-| **Simulated Annealing** | 4,074.1 | 966.1 | 19 | 129 | 0 |
-| **Genetic Algorithm** | 7,910.6 | 2,574.6 | 23 | 943 | 0 |
-| **NSGA-II** | 7,807.1 | 2,205.1 | 24 | 501 | 1 |
+| **Greedy** | 29,680.0 | 18,770.0 | 30 | 1,082 | 1 |
+| **Simulated Annealing** | 10,515.0 | 3,640.0 | 28 | 335 | 1 |
+| **Genetic Algorithm** | 47,660.0 | 20,800.0 | 24 | 2,548 | 6 |
+| **NSGA-II** | 54,570.0 | 18,760.0 | 25 | 3,262 | 13 |
 | **Quantum Annealing (QUBO)** | *In Progress* | *TBD* | *TBD* | *TBD* | *TBD* |
 
 > [!NOTE]

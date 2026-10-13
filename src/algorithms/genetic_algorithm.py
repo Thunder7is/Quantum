@@ -36,7 +36,7 @@ MAX_COUPLE = 2
 OUT_DIR = os.path.abspath(os.path.join(os.path.dirname(__file__), "..", "..", "outputs", "ga"))
 
 # Map discrete 60-trip chromosome representation to unit circulation chains
-def chromosome_to_chains(chromosome: list, fleet_list: list, trips_list: list, type_to_unit_indices: dict) -> dict:
+def chromosome_to_chains(chromosome: list, fleet_list: list, trips_list: list, type_to_unit_indices: dict, dist_lookup: dict = None) -> dict:
     chains = {u["unit_id"]: [] for u in fleet_list}
     for trip_idx, u_idx in enumerate(chromosome):
         trip = trips_list[trip_idx]
@@ -47,8 +47,20 @@ def chromosome_to_chains(chromosome: list, fleet_list: list, trips_list: list, t
         if trip.get("expected_passenger_demand", 0) > primary_unit["capacity"]:
             candidates = [idx for idx in type_to_unit_indices[primary_unit["unit_type"]] if idx != u_idx]
             if candidates:
-                # Deterministic selection based on trip and unit index
-                sec_idx = candidates[(trip_idx + u_idx) % len(candidates)]
+                # Filter candidates to units that can feasibly reach trip origin from home depot
+                feasible_candidates = []
+                for c_idx in candidates:
+                    cand_unit = fleet_list[c_idx]
+                    travel_time = travel(dist_lookup, cand_unit["home_depot"], trip["origin_station"])[0] if dist_lookup is not None else 0
+                    if cand_unit["available_from_min"] + travel_time <= trip["departure_min"]:
+                        feasible_candidates.append(c_idx)
+
+                # Pick first feasible candidate or fallback to modular index
+                if feasible_candidates:
+                    sec_idx = feasible_candidates[0]
+                else:
+                    sec_idx = candidates[(trip_idx + u_idx) % len(candidates)]
+
                 sec_uid = fleet_list[sec_idx]["unit_id"]
                 # Enforce max coupling limit per trip
                 if len(assigned_uids) < MAX_COUPLE and sec_uid not in assigned_uids:
@@ -82,7 +94,7 @@ def find_timing_violated_trips(chains: dict, fleet_lookup: dict, trips_lookup: d
 # Evaluate chromosome fitness using compute_cost with 10x penalty on timing violations
 def evaluate_chromosome(chromosome: list, fleet_list: list, trips_list: list, type_to_unit_indices: dict,
                         trips_lookup: dict, fleet_lookup: dict, dist_lookup: dict, maint_lookup: dict):
-    chains = chromosome_to_chains(chromosome, fleet_list, trips_list, type_to_unit_indices)
+    chains = chromosome_to_chains(chromosome, fleet_list, trips_list, type_to_unit_indices, dist_lookup)
     breakdown = compute_cost(chains, trips_lookup, fleet_lookup, dist_lookup, maint_lookup)
     raw_cost = breakdown["total"]
     timing_violations = breakdown["timing_violations"]

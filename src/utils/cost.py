@@ -86,7 +86,7 @@ def compute_cost(chains: dict, trips_df, fleet_df, dist_lookup, maint_lookup, we
         w.get("deadhead", 1.0) * total_deadhead_km
         + w.get("activation", 150.0) * units_used
         + w.get("maintenance", 5.0) * total_maint_violation_km
-        + w.get("demand", 2.0) * uncovered_demand
+        + w.get("demand", 5.0) * uncovered_demand
         + w.get("timing_violation", 1000.0) * timing_violations
     )
 

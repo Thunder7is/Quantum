@@ -1,0 +1,20 @@
+{
+  "n_variables": 900,
+  "n_qubits_needed": 900,
+  "n_trips": 30,
+  "n_units": 30,
+  "n_quadratic_interactions": 23490,
+  "qubo_density": 0.0581,
+  "linear_min": -6000.0,
+  "linear_max": -3820.0,
+  "quadratic_min": 2000.0,
+  "quadratic_max": 6000.0,
+  "offset": 90000.0,
+  "penalty_weights": {
+    "lambda_coverage": 3000.0,
+    "lambda_continuity": 2000.0,
+    "lambda_maintenance": 1000.0,
+    "lambda_demand": 500.0,
+    "w_deadhead": 1.0
+  }
+}

@@ -1,0 +1,25 @@
+{
+  "breakdown": {
+    "total": 44525.0,
+    "deadhead_km": 15570.0,
+    "units_used": 25,
+    "maintenance_violation_km": 0.0,
+    "uncovered_demand": 5041,
+    "timing_violations": 0
+  },
+  "total_time_sec": 27697.36,
+  "n_outer_iterations": 60,
+  "sampler": "TabuSampler",
+  "hyperparameters": {
+    "subgraph_size": 30,
+    "subgraph_size_large": 35,
+    "mode_switch_threshold": 20,
+    "tabu_reads_per_subgraph": 1000,
+    "tabu_tenure": 7,
+    "tabu_timeout_per_sub": 90,
+    "lambda_mwis": 5000.0,
+    "node_weight_formula": "2 * trip_km - deadhead_km"
+  },
+  "algorithm": "quantum_annealing_divide_and_conquer",
+  "paper_reference": "Guth Jarkovsky et al. 2026 \u2014 adapted for Indian Railway Network"
+}

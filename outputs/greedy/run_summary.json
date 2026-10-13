@@ -1,10 +1,10 @@
 {
   "breakdown": {
-    "total": 14170.0,
-    "deadhead_km": 10570.0,
-    "units_used": 24,
+    "total": 22535.0,
+    "deadhead_km": 15820.0,
+    "units_used": 30,
     "maintenance_violation_km": 0.0,
-    "uncovered_demand": 0,
+    "uncovered_demand": 443,
     "timing_violations": 0
   },
   "method": "greedy"

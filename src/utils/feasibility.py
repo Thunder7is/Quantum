@@ -57,25 +57,62 @@ def is_feasible_chain(unit_row, trip_ids: list, trips_df, dist_lookup) -> bool:
     return True
 
 # Single-pass greedy repair: for each trip in departure order,
-# if assigned unit cannot reach trip origin in time,
-# replace with the unit that has earliest availability.
+# if assigned unit cannot reach trip origin in time or would breach maintenance limit,
+# replace with the best feasible unit available.
 def repair_chromosome(chromosome: list, fleet_list: list, trips_list: list,
                       dist_lookup: dict, *args, **kwargs) -> list:
     repaired = list(chromosome)
     num_units = len(fleet_list)
+
+    # Track availability time and location per unit
     unit_avail = [fleet_list[i]["available_from_min"] for i in range(num_units)]
     unit_loc = [fleet_list[i]["home_depot"] for i in range(num_units)]
+
+    # Track accumulated km per unit to enforce maintenance limits
+    unit_km = [fleet_list[i]["km_since_maintenance"] for i in range(num_units)]
+
+    # Build per-unit maintenance max from unit_type
+    unit_maint_max = []
+    for i in range(num_units):
+        ut = fleet_list[i].get("unit_type", "EMU4")
+        if ut == "EMU8":
+            unit_maint_max.append(15000)
+        else:
+            unit_maint_max.append(12000)
 
     for trip_idx in range(len(repaired)):
         trip = trips_list[trip_idx]
         u_idx = repaired[trip_idx]
-        tt, _ = travel(dist_lookup, unit_loc[u_idx], trip["origin_station"])
-        if unit_avail[u_idx] + tt > trip["departure_min"]:
-            best_idx = min(range(num_units),
-                           key=lambda i: unit_avail[i] +
-                           travel(dist_lookup, unit_loc[i], trip["origin_station"])[0])
+
+        # Travel time and km from current unit location to trip origin
+        tt, deadhead_km = travel(dist_lookup, unit_loc[u_idx], trip["origin_station"])
+        trip_km = trip["distance_km"]
+        projected_km = unit_km[u_idx] + deadhead_km + trip_km
+
+        # Check timing feasibility and maintenance limit together
+        timing_ok = (unit_avail[u_idx] + tt <= trip["departure_min"])
+        maint_ok = (projected_km <= unit_maint_max[u_idx])
+
+        if not timing_ok or not maint_ok:
+            # Find best replacement unit: earliest arrival that also fits maintenance budget
+            def unit_score(i):
+                tt_i, dh_i = travel(dist_lookup, unit_loc[i], trip["origin_station"])
+                arrival_i = unit_avail[i] + tt_i
+                proj_km_i = unit_km[i] + dh_i + trip_km
+                # Penalise maintenance breach heavily so it is avoided
+                maint_penalty = 1e9 if proj_km_i > unit_maint_max[i] else 0
+                return arrival_i + maint_penalty
+
+            best_idx = min(range(num_units), key=unit_score)
             repaired[trip_idx] = best_idx
             u_idx = best_idx
+
+        # Update state for the chosen unit
+        _, dh_used = travel(dist_lookup, unit_loc[u_idx], trip["origin_station"])
+        unit_km[u_idx] += dh_used + trip_km
+        # Reset km counter if maintenance limit crossed (unit services at Kolkata)
+        if unit_km[u_idx] > unit_maint_max[u_idx]:
+            unit_km[u_idx] = 0.0
         unit_avail[u_idx] = trip["arrival_min"] + trip["min_turnaround_min"]
         unit_loc[u_idx] = trip["destination_station"]
 

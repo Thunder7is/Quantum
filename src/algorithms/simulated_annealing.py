@@ -8,14 +8,14 @@ import pandas as pd
 
 # Support execution as direct script or package module
 try:
-    from ..utils.data_loader import load_instance, get_lookups
+    from ..utils.data_loader import load_instance, get_lookups, travel
     from ..utils.cost import compute_cost
     from ..utils.greedy_init import greedy_construction, chains_to_schedule_df
     from ..utils.feasibility import is_feasible_arc
     from ..utils.viz import plot_cost_history
 except (ImportError, ValueError):
     sys.path.insert(0, os.path.abspath(os.path.join(os.path.dirname(__file__), "..", "..")))
-    from src.utils.data_loader import load_instance, get_lookups
+    from src.utils.data_loader import load_instance, get_lookups, travel
     from src.utils.cost import compute_cost
     from src.utils.greedy_init import greedy_construction, chains_to_schedule_df
     from src.utils.feasibility import is_feasible_arc
@@ -52,24 +52,30 @@ def move_relocate(chains, all_unit_ids, trips_lookup, dist_lookup, fleet_lookup,
 
     for r_uid in receivers:
         r_chain = new_chains[r_uid]
-        if not r_chain:
-            selected_receiver = r_uid
-            break
         # Sort existing trips on receiver unit to check adjacency
         sorted_r = sorted(r_chain, key=lambda tid: trips_lookup[tid]["departure_min"])
         unit_row = fleet_lookup[r_uid]
-        # Check arc feasibility against adjacent trips in receiver chain
-        feasible = True
-        for existing_tid in sorted_r:
-            existing_trip = trips_lookup[existing_tid]
-            if existing_trip["departure_min"] < trip["departure_min"]:
-                if not is_feasible_arc(unit_row, existing_trip, trip, dist_lookup):
-                    feasible = False
-                    break
-            elif trip["departure_min"] < existing_trip["departure_min"]:
-                if not is_feasible_arc(unit_row, trip, existing_trip, dist_lookup):
-                    feasible = False
-                    break
+
+        # Verify depot feasibility if receiver has no trips
+        feasible = False
+        if not sorted_r:
+            depot_reach = fleet_lookup[r_uid]["available_from_min"] + travel(dist_lookup, fleet_lookup[r_uid]["home_depot"], trip["origin_station"])[0]
+            if depot_reach <= trip["departure_min"]:
+                feasible = True
+        else:
+            # Check arc feasibility against adjacent trips in receiver chain
+            feasible = True
+            for existing_tid in sorted_r:
+                existing_trip = trips_lookup[existing_tid]
+                if existing_trip["departure_min"] < trip["departure_min"]:
+                    if not is_feasible_arc(unit_row, existing_trip, trip, dist_lookup):
+                        feasible = False
+                        break
+                elif trip["departure_min"] < existing_trip["departure_min"]:
+                    if not is_feasible_arc(unit_row, trip, existing_trip, dist_lookup):
+                        feasible = False
+                        break
+
         if feasible:
             selected_receiver = r_uid
             break
@@ -94,13 +100,17 @@ def move_swap(chains, rng):
     return new_chains
 
 # Couple/Decouple move: adjust consist helper unit assignment for a trip
-def move_couple_decouple(chains, all_unit_ids, all_trip_ids, rng):
+def move_couple_decouple(chains, all_unit_ids, all_trip_ids, fleet_lookup, trips_lookup, dist_lookup, rng):
     new_chains = copy_chains(chains)
     trip_id = rng.choice(all_trip_ids)
     assigned_units = [uid for uid, c in new_chains.items() if trip_id in c]
     if rng.random() < 0.5 or not assigned_units:
-        # Add helper unit from available candidate pool
-        candidates = [u for u in all_unit_ids if u not in assigned_units]
+        # Filter candidate units that can feasibly reach trip origin from home depot
+        candidates = [
+            u for u in all_unit_ids
+            if u not in assigned_units
+            and fleet_lookup[u]["available_from_min"] + travel(dist_lookup, fleet_lookup[u]["home_depot"], trips_lookup[trip_id]["origin_station"])[0] <= trips_lookup[trip_id]["departure_min"]
+        ]
         if candidates:
             uid = rng.choice(candidates)
             new_chains[uid].append(trip_id)
@@ -147,7 +157,7 @@ def solve_simulated_annealing(fleet, trips, dist_lookup, maint_lookup, init_chai
             elif operator_choice < 0.8:
                 candidate = move_swap(current, rng)
             else:
-                candidate = move_couple_decouple(current, all_unit_ids, all_trip_ids, rng)
+                candidate = move_couple_decouple(current, all_unit_ids, all_trip_ids, fleet_lookup, trips_lookup, dist_lookup, rng)
 
             cand_breakdown = compute_cost(candidate, trips_lookup, fleet_lookup, dist_lookup, maint_lookup)
             cand_cost = cand_breakdown["total"]

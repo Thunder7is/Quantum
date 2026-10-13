@@ -1,0 +1,46 @@
+{
+  "breakdown": {
+    "total": 39585.0,
+    "deadhead_km": 14610.0,
+    "units_used": 27,
+    "maintenance_violation_km": 0.0,
+    "uncovered_demand": 3785,
+    "timing_violations": 2
+  },
+  "qubo_statistics": {
+    "n_variables": 900,
+    "n_qubits_needed": 900,
+    "n_trips": 30,
+    "n_units": 30,
+    "n_quadratic_interactions": 23490,
+    "qubo_density": 0.0581,
+    "linear_min": -6000.0,
+    "linear_max": -3820.0,
+    "quadratic_min": 2000.0,
+    "quadratic_max": 6000.0,
+    "offset": 90000.0,
+    "penalty_weights": {
+      "lambda_coverage": 3000.0,
+      "lambda_continuity": 2000.0,
+      "lambda_maintenance": 1000.0,
+      "lambda_demand": 500.0,
+      "w_deadhead": 1.0
+    }
+  },
+  "hyperparameters": {
+    "num_reads": 300,
+    "num_sweeps": 500,
+    "beta_range": [
+      0.1,
+      4.0
+    ],
+    "lambda_coverage": 3000.0,
+    "lambda_continuity": 2000.0,
+    "lambda_maintenance": 1000.0,
+    "w_deadhead": 1.0
+  },
+  "sampling_time_sec": 1932.852,
+  "sampler": "dimod.SimulatedAnnealingSampler (D-Wave classical simulation)",
+  "algorithm": "quantum_annealing_qubo",
+  "paper_reference": "Guth Jarkovsky et al. 2026 - adapted for Indian Railway Network"
+}
